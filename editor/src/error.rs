@@ -135,61 +135,51 @@ pub enum EditorError {
     AssertFailed {
         #[from]
         source: AssertFailed,
-        backtrace: Backtrace,
     },
     #[error("unsupported: {source}")]
     Unsupported {
         #[from]
         source: UnsupportedError,
-        backtrace: Backtrace,
     },
     #[error("incorrect format: {source}")]
     IncorrectFormat {
         #[from]
         source: IncorrectFormat,
-        backtrace: Backtrace,
     },
     #[error("corruption error: {source}")]
     Corrupted {
         #[from]
         source: CorruptionError,
-        backtrace: Backtrace,
     },
     #[error("IO error: {source}")]
     IoError {
         #[from]
         source: std::io::Error,
-        backtrace: Backtrace,
     },
     #[error("invalid utf-8 string: {source}")]
     InvalidString {
         #[from]
         source: std::string::FromUtf8Error,
-        backtrace: Backtrace,
     },
     #[error("out of range: {source}")]
     OutOfRange {
         #[from]
         source: RangeError,
-        backtrace: Backtrace,
     },
     #[error("eframe error: {source}")]
     EframeError {
         #[from]
         source: eframe::Error,
-        backtrace: Backtrace,
     },
     #[error("invalid input: {source}")]
     InvalidInput {
         #[from]
         source: InvalidInputError,
-        backtrace: Backtrace,
     },
     #[error("channel send error: {source}")]
     SendError {
         #[from]
         source: futures::channel::mpsc::SendError,
-        backtrace: Backtrace,
     },
 }
 

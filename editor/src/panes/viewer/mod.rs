@@ -17,7 +17,7 @@ use crate::{
         ContentSignature, Pane, PaneAction,
         viewer::{
             pipeline::{TEXTURE_FILTER_MODE, ViewerCallback, ViewerPipeline},
-            translator::{ModelBuffers, TranslationScratchData},
+            translator::{ModelScratch, PolygonScratch},
         },
     },
     shared::{
@@ -28,6 +28,7 @@ use crate::{
     },
 };
 use crate::error::EditorError;
+use crate::panes::viewer::translator::DrawableModel;
 
 pub struct ViewerPane {
     cmd_sender: mpsc::Sender<PaneAction>,
@@ -35,6 +36,7 @@ pub struct ViewerPane {
     node: Option<VirtualNodeId>,
     node_map: VirtualNodeMap,
 
+    model: Option<DrawableModel>,
     render_state: GraphicsState,
 }
 
@@ -47,17 +49,13 @@ impl ViewerPane {
         node_map: VirtualNodeMap,
         render_state: GraphicsState,
     ) -> EditorResult<Box<dyn Pane>> {
-        let model_buffers = mdl0_node
-            .map(|node| ModelBuffers::from_root(node, node_map.clone()))
+        let model = mdl0_node
+            .map(|node| ModelScratch::from_root(node, node_map.clone()))
             .transpose()?
             .map(|bufs| {
-                let scratch = bufs.resolve_shapes()?;
-                // scratch.generate_buffers(&render_state.device)
-                Ok::<(), EditorError>(())
+                bufs.resolve_shapes(&render_state.device)
             })
             .transpose()?;
-
-        dbg!(model_buffers);
 
         let pipeline = ViewerPipeline::new(render_state.clone());
         render_state
@@ -74,6 +72,7 @@ impl ViewerPane {
             node: mdl0_node,
             node_map,
             render_state,
+            model
         }))
     }
 }

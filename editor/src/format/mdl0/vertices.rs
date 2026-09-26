@@ -8,7 +8,7 @@ use crate::format::mdl0::util::VectorDivisor;
 use crate::node::defer::Deferred;
 use crate::node::node::{VirtualNode, VirtualNodeBody, VirtualNodeKind};
 use crate::node::refs::{VirtualNodeId, VirtualNodeMap};
-use crate::panes::viewer::translator::TranslationScratchData;
+use crate::panes::viewer::translator::PolygonScratch;
 use crate::{
     format::{
         encoding::{Deserialize, ReadArrayExt},
