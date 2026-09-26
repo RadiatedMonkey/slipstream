@@ -2054,40 +2054,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mktools"
-version = "0.1.0"
-dependencies = [
- "bitfield-struct",
- "bytemuck",
- "byteorder",
- "console_error_panic_hook",
- "dashmap",
- "eframe",
- "egui",
- "egui-phosphor",
- "egui_extras",
- "egui_tiles",
- "futures",
- "glam",
- "parking_lot",
- "paste",
- "rfd",
- "static_assertions",
- "strum",
- "thiserror 2.0.21",
- "tracing",
- "tracing-subscriber",
- "tracing-tree",
- "tracing-wasm",
- "vergen-gitcl",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
- "wgpu",
- "winit",
-]
-
-[[package]]
 name = "moxcms"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3297,6 +3263,71 @@ name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
+
+[[package]]
+name = "slipstream"
+version = "0.1.0"
+dependencies = [
+ "bitfield-struct",
+ "bytemuck",
+ "byteorder",
+ "console_error_panic_hook",
+ "dashmap",
+ "eframe",
+ "egui",
+ "egui-phosphor",
+ "egui_extras",
+ "egui_tiles",
+ "futures",
+ "glam",
+ "parking_lot",
+ "paste",
+ "rfd",
+ "slipstream-ir",
+ "slipstream-shared",
+ "static_assertions",
+ "strum",
+ "thiserror 2.0.21",
+ "tracing",
+ "tracing-subscriber",
+ "tracing-tree",
+ "tracing-wasm",
+ "vergen-gitcl",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
+name = "slipstream-derive"
+version = "0.1.0"
+
+[[package]]
+name = "slipstream-ir"
+version = "0.1.0"
+dependencies = [
+ "bitfield-struct",
+ "bytemuck",
+ "byteorder",
+ "dashmap",
+ "glam",
+ "parking_lot",
+ "paste",
+ "slipstream-shared",
+ "strum",
+ "tracing",
+]
+
+[[package]]
+name = "slipstream-shared"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "futures",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "slotmap"
