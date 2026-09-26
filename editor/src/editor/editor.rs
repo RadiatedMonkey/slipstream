@@ -334,7 +334,7 @@ impl RoutablePage for Editor {
             match cmd {
                 PaneAction::RequestPaneEdit(_) => todo!(),
                 PaneAction::RequestNewPane(request) => {
-                    self.on_new_pane_request(request);
+                    self.on_new_pane_request(request).unwrap();
                 }
                 PaneAction::RemoveTile(tile) => {
                     self.pane_tree.tiles.remove(tile);

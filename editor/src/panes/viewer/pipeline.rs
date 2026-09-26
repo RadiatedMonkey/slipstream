@@ -1,10 +1,13 @@
 use eframe::egui_wgpu;
 use wgpu::util::DeviceExt;
 
-use crate::shared::{
-    GraphicsState,
-    camera::{Camera, CameraController, CameraUniformData, OrbitCamera},
-    vertex::{CUBE_INDICES, CUBE_VERTICES, Vertex3},
+use crate::{
+    panes::viewer::grid::GridPipeline,
+    shared::{
+        GraphicsState,
+        camera::{Camera, CameraController, CameraUniformData, OrbitCamera},
+        vertex::{CUBE_INDICES, CUBE_VERTICES, Vertex3},
+    },
 };
 
 const DEFAULT_VIEWPORT: egui::Rect =
@@ -264,10 +267,14 @@ impl CameraState {
             .device
             .create_bind_group_layout(&CameraUniformData::layout());
 
+        let view_proj = camera.compute_matrix();
         let uniform_data = CameraUniformData {
             viewport_size: glam::vec4(viewport_size.x as f32, viewport_size.y as f32, 0.0, 0.0),
-            view_proj: camera.compute_matrix(),
+            view_proj,
+            inverse_view_proj: view_proj.inverse(),
         };
+
+        tracing::debug!("inverse view proj: {:?}", uniform_data.inverse_view_proj);
 
         let uniform_buffer = state
             .device
@@ -308,6 +315,7 @@ impl CameraState {
             let view_proj = self.camera.compute_matrix();
             buffer_view.copy_from_slice(bytemuck::bytes_of(&CameraUniformData {
                 view_proj,
+                inverse_view_proj: view_proj.inverse(),
                 viewport_size: self.viewport_size,
             }))
         }
@@ -430,6 +438,8 @@ pub struct ViewerPipeline {
     pub graphics_state: GraphicsState,
     pub viewport_size: glam::UVec2,
 
+    pub grid: GridPipeline,
+
     pub camera_state: CameraState,
     pub screen_texture_state: ScreenTextureState,
     pub pipeline_state: PipelineState,
@@ -455,12 +465,15 @@ impl ViewerPipeline {
         let pipeline_state = PipelineState::new(&graphics_state, &camera_state);
 
         let model_state = ModelState::new(&graphics_state);
+        let grid = GridPipeline::new(&graphics_state.device, &camera_state.bind_group_layout);
 
         Self {
             camera_state,
             screen_texture_state,
             pipeline_state,
             model_state,
+
+            grid,
 
             viewport_size,
             graphics_state,
@@ -511,6 +524,9 @@ impl ViewerPipeline {
             occlusion_query_set: None,
             multiview_mask: None,
         });
+
+        self.grid
+            .draw(&mut render_pass, &self.camera_state.bind_group);
 
         render_pass.set_pipeline(&self.pipeline_state.pipeline);
         render_pass.set_bind_group(0, &self.camera_state.bind_group, &[]);

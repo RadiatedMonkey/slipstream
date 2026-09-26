@@ -1,3 +1,4 @@
+pub mod grid;
 pub mod pipeline;
 pub mod translator;
 
@@ -10,6 +11,7 @@ use eframe::egui_wgpu;
 use egui::mutex::RwLock;
 use wgpu::util::DeviceExt;
 
+use crate::error::EditorError;
 use crate::{
     error::EditorResult,
     node::refs::{VirtualNodeId, VirtualNodeMap},
@@ -159,13 +161,21 @@ impl Pane for ViewerPane {
             }
 
             ui.input(|i| {
+                if i.zoom_delta() != 1.0 {
+                    // Support zooming using a touchpad for laptops
+                    // without a scroll wheel (or for the maniacs trying
+                    // to use this editor on a mobile device)
+                    let delta = 20.0 * (i.zoom_delta() - 1.0);
+
+                    pipeline.camera_state.camera.scroll_delta(delta);
+
+                    camera_updated = true;
+                }
+
                 if i.is_scrolling() && response.contains_pointer() {
                     let scroll_delta = i.smooth_scroll_delta();
 
-                    pipeline
-                        .camera_state
-                        .camera
-                        .scroll_delta(glam::vec2(scroll_delta.x, scroll_delta.y));
+                    pipeline.camera_state.camera.scroll_delta(scroll_delta.y);
 
                     camera_updated = true;
                 }
