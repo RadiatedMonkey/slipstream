@@ -3,4 +3,4 @@ brres.txt
 dump.bin
 model.txt
 output.png
-editor/expand.rs
+slipstream/expand.rs
