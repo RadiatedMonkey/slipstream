@@ -1,27 +1,22 @@
 use std::fmt::Debug;
-use std::sync::OnceLock;
 
 use slipstream_shared::cursor::RefCursor;
 
 use crate::node::arena::{IrArena, IrNodeKey};
+use crate::node::lazy::LazyContent;
 use crate::visitor::Visitable;
-
-pub struct DeferredPayload {
-    reader: RefCursor<[u8]>,
-    ty: IrNodeType,
-}
 
 pub enum ContentSlot {
     /// The content has been evaluated eagerly, i.e. immediately.
     ///
     /// This should also be used when the node has no content.
     Eager(Option<Box<dyn Visitable + Send + Sync>>),
-    Lazy(OnceLock<Box<dyn Visitable + Send + Sync>>, DeferredPayload),
+    Lazy(LazyContent),
 }
 
 impl ContentSlot {
     pub const fn lazy(reader: RefCursor<[u8]>, ty: IrNodeType) -> Self {
-        Self::Lazy(OnceLock::new(), DeferredPayload { reader, ty })
+        Self::Lazy(LazyContent::new(reader, ty))
     }
 
     pub const fn eager(content: Box<dyn Visitable + Send + Sync>) -> Self {
@@ -35,19 +30,32 @@ impl ContentSlot {
     pub fn is_parsed(&self) -> bool {
         match self {
             Self::Eager(_) => true,
-            Self::Lazy(lock,_ ) => lock.get().is_some()
+            Self::Lazy(lock) => LazyContent::initialized(lock),
         }
     }
 
-    /// Forces the slot to be parsed.
+    pub fn get(&self) -> Option<&(dyn Visitable + Send + Sync)> {
+        match self {
+            Self::Eager(Some(x)) => Some(x.as_ref()),
+            Self::Eager(None) => None,
+            Self::Lazy(lock) => LazyContent::get(lock),
+        }
+    }
+
+    /// Forces the slot to be parsed, returning a reference to the content.
     pub fn get_or_init(&self) -> Option<&(dyn Visitable + Send + Sync)> {
         match self {
-            Self::Eager(x) => x.map(|y| y.as_ref()),
-            Self::Lazy(lock, payload) => {
-                Some(lock.get_or_init(|| {
+            Self::Eager(Some(x)) => Some(x.as_ref()),
+            Self::Eager(None) => None,
+            Self::Lazy(lock) => Some(LazyContent::force(lock)),
+        }
+    }
 
-                }))
-            }
+    pub fn get_or_init_mut(&mut self) -> Option<&mut (dyn Visitable + Send + Sync)> {
+        match self {
+            Self::Eager(Some(x)) => Some(x.as_mut()),
+            Self::Eager(None) => None,
+            Self::Lazy(lock) => Some(LazyContent::force_mut(lock)),
         }
     }
 }
@@ -55,12 +63,12 @@ impl ContentSlot {
 pub enum ContentResult<'a> {
     /// This node has no content.
     Empty,
-    /// This node is still being parsed right now.
-    /// 
-    /// Come back later to find the contents.
+    /// This node is still being parsed.
+    ///
+    /// Poll the contents later to retrieve its contents.
     Pending,
     /// This node's content has completely been parsed.
-    Ready(&'a (dyn Visitable + Send + Sync))
+    Ready(&'a (dyn Visitable + Send + Sync)),
 }
 
 /// A node in the filesystem. The editor's file system consists of just a tree with IDs (+ node types). The file contents
@@ -111,16 +119,6 @@ impl IrNode {
 
     pub fn children_keys(&self) -> &[IrNodeKey] {
         &self.children
-    }
-
-    pub fn content<'node>(&'node self, arena: &IrArena) -> ContentResult<'node> {
-        match &self.contents {
-            ContentSlot::Eager(None) => ContentResult::Empty,
-            ContentSlot::Eager(Some(x)) => ContentResult::Ready(x.as_ref()),
-            ContentSlot::Lazy(lock, payload) => {
-                todo!()
-            }
-        }
     }
 }
 

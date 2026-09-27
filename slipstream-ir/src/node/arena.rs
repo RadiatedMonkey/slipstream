@@ -7,9 +7,12 @@ use std::{
     },
 };
 
-use parking_lot::{ArcRwLockReadGuard, RwLock};
+use parking_lot::RwLock;
 
-use crate::node::{guard::ContentReadGuard, node::{ContentSlot, IrNode, IrNodeType}};
+use crate::node::{
+    guard::ContentReadGuard,
+    node::{ContentSlot, IrNode, IrNodeType},
+};
 
 /// A key that can be used to refer to a node.
 ///
@@ -18,14 +21,14 @@ use crate::node::{guard::ContentReadGuard, node::{ContentSlot, IrNode, IrNodeTyp
 #[repr(transparent)]
 pub struct IrNodeKey(NonZeroU64);
 
-/// Implementing [`Into`] instead of [`From`] so keys cannot be created by the user.
+// Implementing [`Into`] instead of [`From`] so keys cannot be created by the user.
 impl Into<NonZeroU64> for IrNodeKey {
     fn into(self) -> NonZeroU64 {
         self.0
     }
 }
 
-/// Implementing [`Into`] instead of [`From`] so keys cannot be created by the user.
+// Implementing [`Into`] instead of [`From`] so keys cannot be created by the user.
 impl Into<u64> for IrNodeKey {
     fn into(self) -> u64 {
         self.0.get()
@@ -113,23 +116,23 @@ impl IrArena {
     }
 
     /// Attempts to load the node's contents. Parsing it if it has not been evaluated yet.
-    /// 
+    ///
     /// ## Note:
     /// This function is blocking, it should not be used on the UI thread.
     pub fn get_content(&self, key: IrNodeKey) -> Option<ContentReadGuard> {
-        self.map.read().get(&key).map(ContentReadGuard::from)
+        self.map.read().get(&key).map(ContentReadGuard::new)
     }
 
     /// Loads the given node and runs `inspect_fn` with a shared reference to it.
     pub fn inspect<T, F>(&self, key: IrNodeKey, inspect_fn: F) -> Option<T>
     where
-        F: FnOnce(&IrNode) -> T
+        F: FnOnce(&IrNode) -> T,
     {
         let guard = self.map.read();
         guard.get(&key).map(|lock| {
             let guard = lock.write();
             inspect_fn(&guard)
-        })    
+        })
     }
 
     /// Loads the given node and runs `update_fn` with a mutable reference to it.

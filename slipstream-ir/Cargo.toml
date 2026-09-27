@@ -9,7 +9,7 @@ slipstream-shared = { path = "../slipstream-shared" }
 byteorder = "1.5.0"
 tracing = "0.1.44"
 bitfield-struct = "0.13.0"
-parking_lot = "0.12.5"
+parking_lot = { version = "0.12.5", features = ["arc_lock"] }
 dashmap = "6.2.1"
 strum = { version = "0.28.0", features = ["derive"] }
 paste = "1.0.15"
@@ -17,3 +17,4 @@ glam = "0.33.10"
 bytemuck = "1.25.2"
 nohash-hasher = "0.2.0"
 rayon = "1.12.0"
+parking_lot_core = "0.9.12"

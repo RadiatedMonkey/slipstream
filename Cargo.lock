@@ -3354,6 +3354,7 @@ dependencies = [
  "glam",
  "nohash-hasher",
  "parking_lot",
+ "parking_lot_core",
  "paste",
  "rayon",
  "slipstream-shared",
