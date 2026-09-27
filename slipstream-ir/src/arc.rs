@@ -163,13 +163,13 @@ fn parse_leaf_node(
     reader.set_position(reader.position() - 4);
 
     match magic {
-        ARC_MAGIC => deserialize(reader, parent_id, arena, label),
-        BRRES_MAGIC => brres::deserialize_virtual(reader, parent_id, arena, label),
+        ARC_MAGIC => deserialize(reader, Some(parent_id), arena, label),
+        BRRES_MAGIC => brres::deserialize(reader, Some(parent_id), arena, label),
         _ => {
             let key = arena.insert(IrNodeDescriptor {
                 label,
                 ty: IrNodeType::Unknown,
-                parent: parent_id,
+                parent: Some(parent_id),
                 children: Vec::new(),
                 contents: ContentSlot::eager(Box::new(UnknownFile {
                     reader: reader.clone(),
@@ -198,7 +198,7 @@ impl Visitable for ArcDirectory {
 #[tracing::instrument(skip_all, fields(label))]
 fn construct_directory_tree(
     node_list: &mut [Node],
-    parent: IrNodeKey,
+    parent: Option<IrNodeKey>,
     arena: &IrArena,
     label: String,
     uncompressed_size: i32,
@@ -225,7 +225,7 @@ fn construct_directory_tree(
             NodeContent::Directory { .. } => {
                 let child = construct_directory_tree(
                     node_list,
-                    key,
+                    Some(key),
                     arena,
                     name,
                     uncompressed_size,
@@ -260,7 +260,7 @@ fn construct_directory_tree(
 
 pub fn deserialize(
     reader: &mut RefCursor<[u8]>,
-    parent_id: IrNodeKey,
+    parent_id: Option<IrNodeKey>,
     arena: &IrArena,
     name: String,
 ) -> SlipstreamResult<IrNodeKey> {

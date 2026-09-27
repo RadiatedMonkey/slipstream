@@ -1,15 +1,17 @@
 use crate::{
     arc::{ArcDirectory, UnknownFile},
     mdl0::{
-        bones::Bone, colors::ColorBuffer, definitions::Definitions, materials::MaterialBuffer,
-        normals::NormalBuffer, pal_links::PaletteLinks, polygon::Polygon, tevs::Tev,
-        tex_links::TextureLinks, uvs::UvBuffer, vertices::VertexBuffer,
+        self, bones::Bone, colors::ColorBuffer, definitions::Definitions,
+        materials::MaterialBuffer, normals::NormalBuffer, pal_links::PaletteLinks,
+        polygon::Polygon, tevs::Tev, tex_links::TextureLinks, uvs::UvBuffer,
+        vertices::VertexBuffer,
     },
 };
 
 #[allow(unused_variables)]
 pub trait Visitor {
     fn visit_arc(&mut self, arc: &ArcDirectory) {}
+    fn visit_mdl0(&mut self, model: &mdl0::Model) {}
     fn visit_definitions(&mut self, definitions: &Definitions) {}
     fn visit_bone(&mut self, bone: &Bone) {}
     fn visit_vertices(&mut self, vertex_buf: &VertexBuffer) {}

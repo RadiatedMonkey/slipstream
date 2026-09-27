@@ -213,6 +213,7 @@ impl Visitable for Polygon {
 }
 
 impl DeserializeSection for Polygon {
+    const NAME: &str = "Polygons";
     const KIND: IrNodeType = IrNodeType::Polygon;
 
     #[tracing::instrument(skip_all, fields(header_start = _header_start))]

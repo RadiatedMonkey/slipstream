@@ -138,6 +138,7 @@ impl Visitable for NormalBuffer {
 }
 
 impl DeserializeSection for NormalBuffer {
+    const NAME: &str = "Normals";
     const KIND: IrNodeType = IrNodeType::Normals;
 
     fn deserialize_section(

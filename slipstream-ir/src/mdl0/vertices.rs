@@ -110,6 +110,7 @@ impl Visitable for VertexBuffer {
 }
 
 impl DeserializeSection for VertexBuffer {
+    const NAME: &str = "Vertices";
     const KIND: IrNodeType = IrNodeType::VertexBuffer;
 
     #[tracing::instrument(skip_all, fields(header_start))]

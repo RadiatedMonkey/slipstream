@@ -12,9 +12,20 @@ pub mod vertices;
 
 use crate::brres::{self, BFileHeader, BFileType};
 use crate::encoding::ReadArrayExt;
-use crate::node::arena::{IrArena, IrNodeKey};
-use crate::node::defer::Deferred;
-use crate::node::node::{IrNode, IrNodeType};
+use crate::mdl0::colors::ColorBuffer;
+use crate::mdl0::definitions::Definitions;
+use crate::mdl0::materials::MaterialBuffer;
+use crate::mdl0::normals::NormalBuffer;
+use crate::mdl0::pal_links::PaletteLinks;
+use crate::mdl0::polygon::Polygon;
+use crate::mdl0::tevs::Tev;
+use crate::mdl0::tex_links::TextureLinks;
+use crate::mdl0::uvs::UvBuffer;
+use crate::mdl0::vertices::VertexBuffer;
+use crate::node::arena::{IrArena, IrNodeDescriptor, IrNodeKey};
+use crate::node::node::{ContentSlot, IrNode, IrNodeType};
+use crate::section::deserialize_leaf_section;
+use crate::visitor::{Visitable, Visitor};
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::{
@@ -269,6 +280,12 @@ pub struct Model {
     pub bone_link_table: BoneLinkTable,
 }
 
+impl Visitable for Model {
+    fn accept(&self, visitor: &mut dyn Visitor) {
+        visitor.visit_mdl0(self);
+    }
+}
+
 #[tracing::instrument(skip_all, fields(name, parent_id))]
 pub fn deserialize(
     reader: &mut RefCursor<[u8]>,
@@ -308,7 +325,7 @@ pub fn deserialize(
     let _mdl0_header = Mdl0Header::deserialize(reader)?;
 
     let bone_link_table = BoneLinkTable::deserialize(reader)?;
-    let mdl_node_id = arena.next_id();
+    let mdl_root_key = arena.reserve_key();
 
     let mut files = Vec::with_capacity(subfile_header.offsets.len());
     for (i, &section_offset) in subfile_header.offsets.iter().enumerate() {
@@ -322,83 +339,90 @@ pub fn deserialize(
         let section_ty = SectionType::try_from(i as u32)?;
 
         let mut reader = reader.clone();
-        let arena2 = arena.clone();
 
-        let section_id = arena.next_id();
         let section_start = subfile_header.header_start as i64 + section_offset as i64;
         reader.set_position(section_start as u64);
 
         tracing::debug!("Parsing {section_ty:?}");
 
-        let node_body = match section_ty {
-            SectionType::DrawLists => {
-                definitions::deserialize_virtual(&mut reader, parent_id, &arena2)
-            }
-            SectionType::Bones => bones::deserialize_skeleton(&mut reader, parent_id, &arena2),
-            SectionType::Vertices => vertices::deserialize_virtual(
+        let section_key = match section_ty {
+            SectionType::DrawLists => deserialize_leaf_section::<Definitions>(
                 &mut reader,
                 subfile_header.header_start,
                 parent_id,
-                &arena2,
+                arena,
             ),
-            SectionType::Normals => normals::deserialize_normals_section(
+            SectionType::Bones => bones::deserialize_skeleton(&mut reader, parent_id, arena),
+            SectionType::Vertices => deserialize_leaf_section::<VertexBuffer>(
                 &mut reader,
                 subfile_header.header_start,
                 parent_id,
-                &arena2,
+                arena,
             ),
-            SectionType::Colors => colors::deserialize_virtual(&mut reader, parent_id, &arena2),
-            SectionType::UvCoordinates => uvs::deserialize_virtual(
+            SectionType::Normals => deserialize_leaf_section::<NormalBuffer>(
                 &mut reader,
                 subfile_header.header_start,
                 parent_id,
-                &arena2,
+                arena,
             ),
-            SectionType::Materials => materials::deserialize_virtual(
+            SectionType::Colors => deserialize_leaf_section::<ColorBuffer>(
                 &mut reader,
                 subfile_header.header_start,
                 parent_id,
-                &arena2,
+                arena,
             ),
-            SectionType::Tevs => tevs::deserialize_virtual(&mut reader, parent_id, &arena2),
-            SectionType::Shapes => polygon::deserialize_virtual(
+            SectionType::UvCoordinates => deserialize_leaf_section::<UvBuffer>(
                 &mut reader,
                 subfile_header.header_start,
                 parent_id,
-                &arena2,
+                arena,
             ),
-            SectionType::TextureLinks => {
-                tex_links::deserialize_virtual(&mut reader, parent_id, &arena2)
-            }
-            _ => Ok(VirtualNodeBody {
-                children: Vec::new(),
-                inspectable: None,
-            }),
+            SectionType::Materials => deserialize_leaf_section::<MaterialBuffer>(
+                &mut reader,
+                subfile_header.header_start,
+                parent_id,
+                arena,
+            ),
+            SectionType::Tevs => deserialize_leaf_section::<Tev>(
+                &mut reader,
+                subfile_header.header_start,
+                parent_id,
+                arena,
+            ),
+            SectionType::Shapes => deserialize_leaf_section::<Polygon>(
+                &mut reader,
+                subfile_header.header_start,
+                parent_id,
+                arena,
+            ),
+            SectionType::TextureLinks => deserialize_leaf_section::<TextureLinks>(
+                &mut reader,
+                subfile_header.header_start,
+                parent_id,
+                arena,
+            ),
+            SectionType::PaletteLinks => deserialize_leaf_section::<PaletteLinks>(
+                &mut reader,
+                subfile_header.header_start,
+                parent_id,
+                arena,
+            ),
+            _ => todo!(),
         }?;
 
-        let node = IrNode::from(IrNode {
-            label: MDL0_SECTION_NAMES[i].to_owned(),
-            key: section_id,
-            parent: Some(mdl_node_id),
-            ty: IrNodeType::BrresDirectory,
-            body: Deferred::evaluated(node_body),
-        });
-
-        arena.insert(section_id, node);
-        files.push(section_id);
+        files.push(section_key);
     }
 
-    let node = IrNode::from(IrNode {
-        label: name,
-        key: mdl_node_id,
-        parent: Some(parent_id),
-        ty: IrNodeType::Mdl0Root,
-        body: Deferred::evaluated(VirtualNodeBody {
+    arena.insert_at(
+        mdl_root_key,
+        IrNodeDescriptor {
+            label: name,
+            ty: IrNodeType::Mdl0Root,
+            parent: Some(parent_id),
             children: files,
-            inspectable: Some(Box::new(Model { bone_link_table })),
-        }),
-    });
+            contents: ContentSlot::eager(Box::new(Model { bone_link_table })),
+        },
+    );
 
-    arena.insert(mdl_node_id, node);
-    Ok(mdl_node_id)
+    Ok(mdl_root_key)
 }

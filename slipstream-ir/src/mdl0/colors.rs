@@ -237,6 +237,7 @@ impl Visitable for ColorBuffer {
 }
 
 impl DeserializeSection for ColorBuffer {
+    const NAME: &str = "Colors";
     const KIND: IrNodeType = IrNodeType::Colors;
 
     fn deserialize_section(

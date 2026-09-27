@@ -34,6 +34,7 @@ impl Visitable for PaletteLinks {
 }
 
 impl DeserializeSection for PaletteLinks {
+    const NAME: &str = "Palette links";
     const KIND: IrNodeType = IrNodeType::PaletteLinks;
 
     #[tracing::instrument(skip_all, fields(header_start = _header_start))]

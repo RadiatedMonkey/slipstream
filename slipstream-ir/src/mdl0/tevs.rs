@@ -21,6 +21,7 @@ impl Visitable for Tev {
 }
 
 impl DeserializeSection for Tev {
+    const NAME: &str = "Shaders";
     const KIND: IrNodeType = IrNodeType::Tevs;
 
     #[tracing::instrument(skip_all, fields(header_start = _header_start))]

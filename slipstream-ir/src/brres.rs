@@ -5,12 +5,12 @@ use slipstream_shared::error::{
     UnsupportedError,
 };
 
-use crate::chr0::Chr0Subfile;
+use crate::arc::UnknownFile;
 use crate::encoding::ReadArrayExt;
 use crate::index::IndexGroup;
 use crate::mdl0::{self, MDL0_MAGIC};
 use crate::node::arena::{IrArena, IrNodeDescriptor, IrNodeKey};
-use crate::node::node::{IrNode, IrNodeType};
+use crate::node::node::{ContentSlot, IrNode, IrNodeType};
 
 /// Equals "bres". This is always at the start of a BRRES file.
 pub const BRRES_MAGIC: [u8; 4] = [0x62, 0x72, 0x65, 0x73];
@@ -67,13 +67,13 @@ pub fn get_section_count(ty: BFileType, version: u32) -> SlipstreamResult<usize>
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct Header {
+struct BrresHeader {
     pub size: u32,
     pub root_offset: u16,
     pub section_count: u16,
 }
 
-impl Header {
+impl BrresHeader {
     pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let magic = reader.read_u8_array::<4>()?;
         if magic != BRRES_MAGIC {
@@ -252,7 +252,10 @@ fn deserialize_bfile(
             let key = arena.insert(IrNodeDescriptor {
                 label: String::from("<unparsed>"),
                 ty: IrNodeType::Unknown,
-                contents: ContentSlot::
+                contents: ContentSlot::eager(Box::new(UnknownFile {
+                    reader: reader.clone(),
+                })),
+                ..Default::default()
             });
 
             Ok(key)
@@ -260,101 +263,167 @@ fn deserialize_bfile(
     }
 }
 
-pub fn deserialize_virtual(
+fn deserialize_subdirectories(
     reader: &mut RefCursor<[u8]>,
-    parent_id: IrNodeKey,
+    parent_key: IrNodeKey,
     arena: &IrArena,
-    name: String,
-) -> SlipstreamResult<IrNodeKey> {
-    let mut reader = reader.clone();
-    let brres_id = arena.next_id();
+) -> SlipstreamResult<Vec<IrNodeKey>> {
+    let index = IndexGroup::deserialize(reader)?;
 
-    let arena2 = arena.clone();
+    let mut subdirs = Vec::with_capacity(index.entries.len() - 1);
+    for subdir in &index.entries[1..] {
+        let label = index.get_entry_name(reader, subdir)?;
+        let data_start = index.get_entry_data_start(subdir);
 
-    let name2 = name.clone();
-    let parse_brres = move |_data| {
-        tracing::trace!("Triggered deferred parse of `{name2}`");
+        reader.set_position(data_start);
 
-        let header = Header::deserialize(&mut reader)?;
+        tracing::trace!("Deserializing BRRES directory `{label}`");
 
-        // Skip to root start
-        reader.set_position(header.root_offset as u64);
+        let subdir_key = arena.reserve_key();
 
-        let _root = RootSection::deserialize(&mut reader)?;
-        let root_index = IndexGroup::deserialize(&mut reader)?;
-
-        let mut directories = Vec::with_capacity(root_index.entries.len());
-
-        // Do not include root subfile.
-        for dir in &root_index.entries[1..] {
-            let dir_name = root_index.get_entry_name(&mut reader, dir)?.to_owned();
-            let dir_id = arena2.next_id();
-
-            tracing::trace!(
-                "Discovered folder `{dir_name}` at location {}",
-                reader.position()
-            );
-
-            reader.set_position(root_index.get_entry_data_start(dir) as u64);
-
-            let child_index = IndexGroup::deserialize(&mut reader)?;
-            let mut subfiles = Vec::with_capacity(child_index.entries.len());
-
-            // Skip root subfile
-            for subfile in &child_index.entries[1..] {
-                let subfile_name = child_index.get_entry_name(&mut reader, subfile)?.to_owned();
-
-                tracing::trace!(
-                    "Discovered file `{dir_name}/{subfile_name}` at location `{}`",
-                    reader.position()
-                );
-
-                reader.set_position(child_index.get_entry_data_start(subfile) as u64);
-
-                // Skip over unimplemented formats for testing for now
-                {
-                    let magic = &reader.remaining()[..4];
-                    if magic != MDL0_MAGIC && magic != Chr0Subfile::MAGIC {
-                        tracing::error!("SKIPPING {}", String::from_utf8_lossy(magic));
-                        continue;
-                    }
-                }
-
-                let file = tracing::trace_span!("deserialize_subfile", %dir_name, %subfile_name)
-                    .in_scope(|| deserialize_bfile(&mut reader, dir_id, &arena2, subfile_name))?;
-
-                subfiles.push(file);
-            }
-
-            let node = IrNode::from(IrNode {
-                label: dir_name,
-                key: dir_id,
-                parent: Some(brres_id),
+        arena.insert_at(
+            subdir_key,
+            IrNodeDescriptor {
+                label,
                 ty: IrNodeType::BrresDirectory,
-                body: Deferred::evaluated(VirtualNodeBody {
-                    children: subfiles,
-                    inspectable: None,
-                }),
-            });
+                parent: Some(parent_key),
+                ..Default::default()
+            },
+        );
 
-            arena2.insert(dir_id, node);
-            directories.push(dir_id);
-        }
+        subdirs.push(subdir_key);
+    }
 
-        Ok(VirtualNodeBody {
-            inspectable: None,
-            children: directories,
-        })
-    };
-
-    let node = IrNode::from(IrNode {
-        label: name,
-        key: brres_id,
-        parent: parent_id,
-        ty: IrNodeType::BrresDirectory,
-        body: Deferred::defer((), parse_brres)?,
-    });
-
-    arena.insert(brres_id, node);
-    Ok(brres_id)
+    Ok(subdirs)
 }
+
+pub fn deserialize(
+    reader: &mut RefCursor<[u8]>,
+    parent_key: Option<IrNodeKey>,
+    arena: &IrArena,
+    label: String,
+) -> SlipstreamResult<IrNodeKey> {
+    let header = BrresHeader::deserialize(reader)?;
+    reader.set_position(header.root_offset as u64); // Skip to root start
+
+    let _root = RootSection::deserialize(reader)?;
+
+    let brres_key = arena.reserve_key();
+    let brres_subdirectories = deserialize_subdirectories(reader, brres_key, arena)?;
+
+    arena.insert_at(
+        brres_key,
+        IrNodeDescriptor {
+            label,
+            ty: IrNodeType::BrresFile,
+            parent: parent_key,
+            children: brres_subdirectories,
+            ..Default::default()
+        },
+    );
+
+    Ok(brres_key)
+}
+
+// pub fn deserialize(
+//     reader: &mut RefCursor<[u8]>,
+//     parent_id: IrNodeKey,
+//     arena: &IrArena,
+//     name: String,
+// ) -> SlipstreamResult<IrNodeKey> {
+//     let mut reader = reader.clone();
+//     let brres_key = arena.reserve_key();
+//
+//     let arena2 = arena.clone();
+//
+//     let name2 = name.clone();
+//     let parse_brres = move |_data| {
+//         tracing::trace!("Triggered deferred parse of `{name2}`");
+//
+//         let header = BrresHeader::deserialize(&mut reader)?;
+//
+//         // Skip to root start
+//         reader.set_position(header.root_offset as u64);
+//
+//         let _root = RootSection::deserialize(&mut reader)?;
+//         let root_index = IndexGroup::deserialize(&mut reader)?;
+//
+//         let mut directories = Vec::with_capacity(root_index.entries.len());
+//         for subdirectory in &root_index.entries[1..] {
+//             let subdirectory_label = root_index
+//                 .get_entry_name(&mut reader, subdirectory)?
+//                 .to_owned();
+//             let subdirectory_start = root_index.get_entry_data_start(subdirectory);
+//             let subdirectory_key = arena.reserve_key();
+//
+//             tracing::trace!(
+//                 "Discovered folder `{subdirectory_label}` at location {}",
+//                 reader.position()
+//             );
+//
+//             reader.set_position(subdirectory_start);
+//
+//             let subfile_index = IndexGroup::deserialize(&mut reader)?;
+//             let mut subfiles = Vec::with_capacity(subfile_index.entries.len());
+//
+//             // Skip root subfile
+//             for subfile in &subfile_index.entries[1..] {
+//                 let subfile_label = subfile_index
+//                     .get_entry_name(&mut reader, subfile)?
+//                     .to_owned();
+//
+//                 let subfile_start = subfile_index.get_entry_data_start(subfile);
+//
+//                 tracing::trace!(
+//                     "Discovered file `{subdirectory_label}/{subfile_label}` at location `{}`",
+//                     reader.position()
+//                 );
+//
+//                 reader.set_position(subfile_start);
+//
+//                 // Skip over unimplemented formats for testing for now
+//                 {
+//                     let magic = &reader.remaining()[..4];
+//                     if magic != MDL0_MAGIC && magic != Chr0Subfile::MAGIC {
+//                         tracing::error!("SKIPPING {}", String::from_utf8_lossy(magic));
+//                         continue;
+//                     }
+//                 }
+//
+//                 let file =
+//                     tracing::trace_span!("deserialize_subfile", %subdirectory_label, %subfile_label)
+//                         .in_scope(|| {
+//                             deserialize_bfile(&mut reader, subdirectory_key, &arena2, subfile_label)
+//                         })?;
+//
+//                 subfiles.push(file);
+//             }
+//
+//             arena.insert_at(
+//                 subdirectory_key,
+//                 IrNodeDescriptor {
+//                     label: subdirectory_label,
+//                     ty: IrNodeType::BrresDirectory,
+//                     parent: parent_id,
+//                     children: subfiles,
+//                     ..Default::default()
+//                 },
+//             );
+//
+//             directories.push(subdirectory_key);
+//         }
+//
+//         Ok(VirtualNodeBody {
+//             inspectable: None,
+//             children: directories,
+//         })
+//     };
+//
+//     arena.insert_at(brres_key, IrNodeDescriptor {
+//         label: name,
+//         ty: IrNodeType::ArcDirectory { empty:  },
+//
+//     });
+//
+//     Ok(brres_key)
+// }

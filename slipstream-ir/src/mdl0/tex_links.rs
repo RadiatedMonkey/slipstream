@@ -34,6 +34,7 @@ impl Visitable for TextureLinks {
 }
 
 impl DeserializeSection for TextureLinks {
+    const NAME: &str = "Texture links";
     const KIND: IrNodeType = IrNodeType::TextureLinks;
 
     #[tracing::instrument(skip_all, fields(header_start = _header_start))]

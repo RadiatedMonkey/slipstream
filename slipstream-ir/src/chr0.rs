@@ -435,7 +435,7 @@ impl AnimationData {
     /// Deserializes the current keyframe.
     fn deserialize_key_frame(
         reader: &mut RefCursor<[u8]>,
-        bone_data_start: u32,
+        bone_data_start: u64,
         header_frame_count: u16,
         format: AnimationFormat,
     ) -> SlipstreamResult<AnimationType> {
@@ -470,7 +470,7 @@ impl AnimationData {
     /// Returns the scale data of the current keyframe.
     fn deserialize_scale(
         reader: &mut RefCursor<[u8]>,
-        bone_data_start: u32,
+        bone_data_start: u64,
         header_frame_count: u16,
         anim_ty_code: &AnimationCode,
     ) -> SlipstreamResult<ComponentData> {
@@ -554,7 +554,7 @@ impl AnimationData {
     /// Reads the rotation data of the current keyframe.
     fn deserialize_rotation(
         reader: &mut RefCursor<[u8]>,
-        bone_data_start: u32,
+        bone_data_start: u64,
         header_frame_count: u16,
         anim_code: &AnimationCode,
     ) -> SlipstreamResult<ComponentData> {
@@ -632,7 +632,7 @@ impl AnimationData {
     /// Reads the translation data of the current keyframe.
     fn deserialize_translation(
         reader: &mut RefCursor<[u8]>,
-        bone_data_start: u32,
+        bone_data_start: u64,
         header_frame_count: u16,
         anim_code: &AnimationCode,
     ) -> SlipstreamResult<ComponentData> {
@@ -706,7 +706,7 @@ impl AnimationData {
     /// Deserializes all (translation, rotation and scale) components of a single keyframe.
     pub fn deserialize(
         reader: &mut RefCursor<[u8]>,
-        bone_data_start: u32,
+        bone_data_start: u64,
         header_frame_count: u16,
         anim_code: &AnimationCode,
     ) -> SlipstreamResult<Self> {
@@ -764,7 +764,7 @@ impl AnimatedBone {
     #[tracing::instrument(skip(reader, bone_data_start, header_frame_count))]
     pub fn deserialize(
         reader: &mut RefCursor<[u8]>,
-        bone_data_start: u32,
+        bone_data_start: u64,
         header_frame_count: u16,
         name: String,
     ) -> SlipstreamResult<Self> {

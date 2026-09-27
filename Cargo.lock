@@ -3313,6 +3313,7 @@ dependencies = [
  "byteorder",
  "dashmap",
  "glam",
+ "nohash-hasher",
  "parking_lot",
  "paste",
  "slipstream-shared",

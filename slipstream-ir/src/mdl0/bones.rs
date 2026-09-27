@@ -9,9 +9,10 @@ use crate::{
     encoding::ReadArrayExt,
     index::IndexGroup,
     node::{
-        arena::{IrArena, IrNodeKey},
-        node::IrNodeType,
+        arena::{IrArena, IrNodeDescriptor, IrNodeKey},
+        node::{ContentSlot, IrNodeType},
     },
+    section::DeserializeSection,
     visitor::{Visitable, Visitor},
 };
 
@@ -182,8 +183,8 @@ impl UnresolvedBone {
 /// A bone combined with its name.
 #[derive(Debug)]
 pub struct LabeledBone {
-    pub name: String,
-    pub bone: UnresolvedBone,
+    pub label: String,
+    pub data: UnresolvedBone,
 }
 
 #[derive(Debug)]
@@ -207,7 +208,7 @@ pub struct Bone {
 impl Bone {
     /// Converts raw bone data into a more usable format by resolving the file offsets
     /// to proper node references. This ensures the editor knows which other files this one refers to.
-    pub fn from_bone(
+    pub fn from_unresolved(
         bone: &UnresolvedBone,
         billboard_id: Option<IrNodeKey>,
         parent_id: Option<IrNodeKey>,
@@ -240,7 +241,7 @@ impl Visitable for Bone {
 /// Builds a nested tree of bones as nodes and returns the root node of the skeleton.
 fn build_skeleton_tree(
     reader: &mut RefCursor<[u8]>,
-    parent_id: IrNodeKey,
+    root_key: IrNodeKey,
     bones: &[LabeledBone],
     arena: &IrArena,
 ) -> SlipstreamResult<IrNodeKey> {
@@ -253,47 +254,33 @@ fn build_skeleton_tree(
     let virtual_bones = bones
         .iter()
         .map(|bone| {
-            let id = arena.next_id();
-            let node = VirtualNode {
-                label: bone.name.clone(),
-                id,
-                ty: IrNodeType::Bone { end: true }, // Set as final bone by default.
+            arena.insert(IrNodeDescriptor {
+                label: bone.label.clone(),
+                ty: IrNodeType::Bone { end: true },
                 parent: None,
-                body: Deferred::evaluated(VirtualNodeBody {
-                    children: Vec::new(),
-                    inspectable: None,
-                }),
-            };
-
-            arena.insert(id, node);
-            id
+                ..Default::default()
+            })
         })
         .collect::<Vec<_>>();
 
     let mut found_root = None; // The bone that was determined to be the root of the skeleton.
     for (i, bone) in bones.iter().enumerate() {
-        let curr_id = virtual_bones[i];
+        let curr_key = virtual_bones[i];
 
-        if bone.bone.parent_offset == 0 {
+        // This bone has no parent, i.e it is the root.
+        if bone.data.parent_offset == 0 {
             found_root = Some(i);
 
-            // Set the body of this bone to the virtual bone data.
-            let node = arena
-                .get(curr_id)
-                .expect("virtual node that was just added does not exist");
-
-            let mut lock = node.write();
-            lock.body.inspect_mut(|body| {
-                body.inspectable = Some(Box::new(Bone::from_bone(&bone.bone, None, None)));
+            arena.update(curr_key, |bone_node| {
+                bone_node.ty = IrNodeType::Bone { end: false };
+                bone_node.contents =
+                    ContentSlot::eager(Box::new(Bone::from_unresolved(&bone.data, None, None)));
             });
-
-            lock.parent = Some(parent_id);
-            lock.ty = IrNodeType::Bone { end: false };
 
             continue; // No parent
         }
 
-        let parent_start = bone.bone.bone_start as i64 + bone.bone.parent_offset as i64;
+        let parent_start = bone.data.bone_start as i64 + bone.data.parent_offset as i64;
         reader.set_position(parent_start as u64 + BONE_INDEX_OFFSET);
 
         // Index into `virtual_bones` of the parent.
@@ -303,48 +290,28 @@ fn build_skeleton_tree(
             // This would cause cyclical references.
 
             return Err(InvalidInputError {
-                reason: format!("bone `{}` is its own parent", bone.name),
+                reason: format!("bone `{}` is its own parent", bone.label),
                 ..Default::default()
             }
             .into());
         }
 
-        let parent_id = virtual_bones[parent_index as usize];
-        let parent_node = arena.get(parent_id).ok_or_else(|| {
-            SlipstreamError::from(InvalidInputError {
-                reason: format!("virtual node {parent_id} does not exist"),
-                ..Default::default()
-            })
-        })?;
+        // Add this bone to its parent's children.
+        let parent_key = virtual_bones[parent_index as usize];
+        arena.update(parent_key, |parent_node| {
+            parent_node.ty = IrNodeType::Bone { end: false };
+            parent_node.children.push(curr_key);
+        });
 
-        {
-            let mut lock = parent_node.write();
-
-            // Change the file tree kind to reflect that it now has children.
-            lock.ty = IrNodeType::Bone { end: false };
-
-            // Add this child to its parent.
-            lock.body.inspect_mut(|body| {
-                body.children.push(curr_id);
-            });
-        }
-
-        let curr_node = arena.get(curr_id).ok_or_else(|| {
-            SlipstreamError::from(InvalidInputError {
-                reason: format!("virtual node {curr_id} does not exist"),
-                ..Default::default()
-            })
-        })?;
-
-        {
-            // Set the bone's parent and its data.
-            let mut lock = curr_node.write();
-            lock.parent = Some(parent_id);
-            lock.body.inspect_mut(|body| {
-                body.inspectable =
-                    Some(Box::new(Bone::from_bone(&bone.bone, None, Some(parent_id))));
-            });
-        }
+        // Then update this bone's parent.
+        arena.update(curr_key, |curr_node| {
+            curr_node.parent = Some(parent_key);
+            curr_node.contents = ContentSlot::eager(Box::new(Bone::from_unresolved(
+                &bone.data,
+                None,
+                Some(parent_key),
+            )));
+        });
     }
 
     let Some(root_index) = found_root else {
@@ -371,24 +338,28 @@ pub fn deserialize_skeleton(
     reader: &mut RefCursor<[u8]>,
     parent_id: IrNodeKey,
     arena: &IrArena,
-) -> SlipstreamResult<VirtualNodeBody> {
+) -> SlipstreamResult<IrNodeKey> {
     let section_index = IndexGroup::deserialize(reader)?;
     let mut bones = Vec::with_capacity(section_index.entries.len() - 1);
 
     for entry in &section_index.entries[1..] {
-        let name = section_index.get_entry_name(reader, entry)?;
-
+        let label = section_index.get_entry_name(reader, entry)?;
         let data_start = section_index.get_entry_data_start(entry);
-        reader.set_position(data_start as u64);
+
+        reader.set_position(data_start);
 
         let bone = UnresolvedBone::deserialize(reader)?;
-        bones.push(LabeledBone { name, bone });
+        bones.push(LabeledBone { label, data: bone });
     }
 
     let node = build_skeleton_tree(reader, parent_id, &bones, arena)?;
-
-    Ok(VirtualNodeBody {
-        inspectable: None,
+    let root_key = arena.insert(IrNodeDescriptor {
+        label: "Bones".to_owned(),
+        ty: IrNodeType::Bone { end: false },
+        parent: Some(parent_id),
         children: vec![node],
-    })
+        ..Default::default()
+    });
+
+    Ok(root_key)
 }

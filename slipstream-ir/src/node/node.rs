@@ -41,7 +41,7 @@ impl ContentSlot {
 pub struct IrNode {
     /// The label that is displayed in the outliner. This is pretty much only for visuals as the nodes mostly
     /// refer to each other with IDs instead of names.
-    pub(super) label: String,
+    pub label: String,
     /// The ID of this node. This is what other nodes use to refer to this one.
     ///
     /// This key should never be changed for a node and is therefore read-only.
@@ -49,17 +49,17 @@ pub struct IrNode {
     /// Determines what type this node is. This affects how the node is displayed in the outliner and how
     /// other parts of the editor will treat this node. Setting the incorrect type for a node will likely cause
     /// a panic.
-    pub(super) ty: IrNodeType,
+    pub ty: IrNodeType,
     /// The parent of this node.
     ///
     /// This will be `null` if the parent is unknown or this node does not have a parent.
-    pub(super) parent: IrNodeKey,
+    pub parent: Option<IrNodeKey>,
     /// A list of keys of children of this node.
     ///
     /// This value may be lazily evaluated, i.e. it may not be known yet.
     /// By accessing this value, it will be evaluated.
-    pub(super) children: Vec<IrNodeKey>,
-    pub(super) contents: ContentSlot,
+    pub children: Vec<IrNodeKey>,
+    pub contents: ContentSlot,
 }
 
 impl IrNode {
@@ -73,6 +73,10 @@ impl IrNode {
 
     pub fn ty(&self) -> IrNodeType {
         self.ty
+    }
+
+    pub fn set_ty(&mut self, ty: IrNodeType) {
+        self.ty = ty;
     }
 
     pub fn children_keys(&self) -> &[IrNodeKey] {
@@ -99,6 +103,7 @@ pub enum IrNodeType {
         /// Whether the directory is empty. If it is, it will be inactive and have a special icon.
         empty: bool,
     },
+    BrresFile,
     /// A directory in a BRRES file.
     BrresDirectory,
     /// The root of an MDL0 model. This should contain the section directories `Vertices`, `Normals`.

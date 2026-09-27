@@ -614,6 +614,7 @@ impl Visitable for MaterialBuffer {
 }
 
 impl DeserializeSection for MaterialBuffer {
+    const NAME: &str = "Materials";
     const KIND: IrNodeType = IrNodeType::Material;
 
     fn deserialize_section(

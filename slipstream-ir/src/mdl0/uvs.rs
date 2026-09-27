@@ -53,6 +53,7 @@ impl Visitable for UvBuffer {
 }
 
 impl DeserializeSection for UvBuffer {
+    const NAME: &str = "UVs";
     const KIND: IrNodeType = IrNodeType::Uvs;
 
     #[tracing::instrument(skip_all, fields(header_start))]

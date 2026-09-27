@@ -170,6 +170,7 @@ impl Visitable for Definitions {
 }
 
 impl DeserializeSection for Definitions {
+    const NAME: &str = "Definitions";
     const KIND: IrNodeType = IrNodeType::Definitions;
 
     fn deserialize_section(
