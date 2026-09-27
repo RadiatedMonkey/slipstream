@@ -20,17 +20,28 @@ pub enum ContentSlot {
 }
 
 impl ContentSlot {
-    pub fn lazy(reader: RefCursor<[u8]>, ty: IrNodeType) -> Self {
+    pub const fn lazy(reader: RefCursor<[u8]>, ty: IrNodeType) -> Self {
         Self::Lazy(OnceLock::new(), DeferredPayload { reader, ty })
     }
 
-    pub fn eager(content: Box<dyn Visitable + Send + Sync>) -> Self {
+    pub const fn eager(content: Box<dyn Visitable + Send + Sync>) -> Self {
         Self::Eager(Some(content))
     }
 
     pub const fn none() -> Self {
         Self::Eager(None)
     }
+}
+
+pub enum ContentResult<'a> {
+    /// This node has no content.
+    Empty,
+    /// This node is still being parsed right now.
+    /// 
+    /// Come back later to find the contents.
+    Pending,
+    /// This node's content has completely been parsed.
+    Ready(&'a (dyn Visitable + Send + Sync))
 }
 
 /// A node in the filesystem. The editor's file system consists of just a tree with IDs (+ node types). The file contents
@@ -67,15 +78,15 @@ impl IrNode {
         &self.label
     }
 
-    pub fn key(&self) -> IrNodeKey {
+    pub const fn key(&self) -> IrNodeKey {
         self.key
     }
 
-    pub fn ty(&self) -> IrNodeType {
+    pub const fn ty(&self) -> IrNodeType {
         self.ty
     }
 
-    pub fn set_ty(&mut self, ty: IrNodeType) {
+    pub const fn set_ty(&mut self, ty: IrNodeType) {
         self.ty = ty;
     }
 
@@ -83,10 +94,11 @@ impl IrNode {
         &self.children
     }
 
-    pub fn content(&self) -> Option<&(dyn Visitable + Send + Sync)> {
+    pub fn content<'node>(&'node self, arena: &IrArena) -> ContentResult<'node> {
         match &self.contents {
-            ContentSlot::Eager(content) => content.as_deref(),
-            ContentSlot::Lazy(lock, parser) => {
+            ContentSlot::Eager(None) => ContentResult::Empty,
+            ContentSlot::Eager(Some(x)) => ContentResult::Ready(x.as_ref()),
+            ContentSlot::Lazy(lock, payload) => {
                 todo!()
             }
         }

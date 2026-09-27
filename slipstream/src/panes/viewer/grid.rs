@@ -1,17 +1,6 @@
-use std::num::NonZeroU64;
-
-use wgpu::util::DeviceExt;
-
 use crate::panes::viewer::pipeline::{DEPTH_FORMAT, MSAA_SAMPLE_COUNT, TARGET_FORMAT};
 
-// const GRID_SCREEN_RECT_VERTICES: &[[f32; 2]] = &[[-1.0, -1.0], [-1.0, 1.0], [1.0, 1.0]];
-//
-// #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Zeroable, bytemuck::Pod)]
-// #[repr(C)]
-// struct GridUniform {
-//     pub inverse_view_proj: glam::Mat4,
-// }
-
+/// Pipeline that renders the 3D view background grid.
 pub struct GridPipeline {
     pipeline: wgpu::RenderPipeline,
 }

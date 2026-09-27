@@ -1,4 +1,4 @@
-use crate::error::SlipstreamResult;
+use slipstream_shared::error::SlipstreamResult;
 
 pub mod info;
 pub mod intro;

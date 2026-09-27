@@ -1,14 +1,3 @@
-use crate::format::mdl0::vertices::VertexBufData;
-
-impl VertexBufData {
-    pub const fn format(&self) -> wgpu::VertexFormat {
-        match self {
-            Self::Xy(_) => wgpu::VertexFormat::Float32x2,
-            Self::Xyz(_) => wgpu::VertexFormat::Float32x3,
-        }
-    }
-}
-
 #[derive(Debug, Copy, Clone, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
 pub struct Vertex3 {

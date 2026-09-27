@@ -1,6 +1,7 @@
 use futures::{SinkExt, channel::mpsc};
+use slipstream_shared::error::SlipstreamResult;
 
-use crate::{error::SlipstreamResult, pages::RoutablePage};
+use crate::pages::RoutablePage;
 
 /// A command that can be executed by the root app.
 pub enum AppCommand {

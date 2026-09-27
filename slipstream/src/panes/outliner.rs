@@ -1,17 +1,12 @@
 use std::{
-    hash::{DefaultHasher, Hash, Hasher},
+    hash::{Hasher},
     sync::mpsc,
 };
 
-use crate::{
-    error::{InvalidInputError, SlipstreamError, SlipstreamResult},
-    node::{
-        defer::Deferred,
-        node::IrNodeType,
-        refs::{IrArena, IrNodeKey},
-    },
-    panes::{ContentSignature, Pane, PaneAction, RequestNewPane, inspector::InspectorPane},
-};
+use slipstream_ir::node::{arena::{IrArena, IrNodeKey}, node::{IrNode, IrNodeType}};
+use slipstream_shared::error::{InvalidInputError, SlipstreamError, SlipstreamResult};
+
+use crate::{icons::NodeVisualsExt, panes::{ContentSignature, Pane, PaneAction, PaneId, RequestNewPane, inspector::InspectorPane}};
 
 /// The outliner displays a file tree.
 ///
@@ -30,18 +25,131 @@ pub struct OutlinerPane {
 }
 
 impl OutlinerPane {
+    /// Creates a new outliner pane.
+    /// 
+    /// `root_key` is the node that will be the root of the outliner. This makes it possible
+    /// to create outliners of subsets of the project.
     pub fn new(
         cmd_sender: mpsc::Sender<PaneAction>,
         content_sig: ContentSignature,
-        root: IrNodeKey,
+        root_key: IrNodeKey,
         arena: IrArena,
     ) -> Box<dyn Pane> {
         Box::new(Self {
             cmd_sender,
             content_sig,
-            root,
+            root: root_key,
             arena,
         })
+    }
+
+    /// Generates a persistent ID for the collapsible state of the given node.
+    /// 
+    /// Top 32 bits are the pane ID, bottom 32 bits are the node ID.
+    fn get_state_id(node_key: IrNodeKey, ui: &mut egui::Ui) -> egui::Id {
+        let salt = ((PaneId::Outliner as u64) << 32) | node_key.into();
+        ui.make_persistent_id(salt)
+    }
+
+    fn draw_directory_node(&self, node: &IrNode, ui: &mut egui::Ui) -> SlipstreamResult<()> {
+        let state_id = Self::get_state_id(node.key(), ui);
+        let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(
+            ui.ctx(), state_id, false
+        );
+
+        // Determines the rect that should be coloured when the node is hovered over.
+        let row_height = ui.spacing().interact_size.y;
+        let row_rect = egui::Rect::from_min_size(
+            ui.cursor().min, egui::vec2(ui.available_width(), row_height)
+        );
+
+        let row_response = ui.interact(
+            row_rect, state_id.with("interact"), egui::Sense::click()
+        );
+
+        // If the cursor hovers over the node, fill the background with a different colour.
+        if ui.rect_contains_pointer(row_rect) {
+            ui.painter().rect_filled(
+                row_rect, 
+                ui.visuals().widgets.hovered.corner_radius,
+                ui.visuals().widgets.hovered.bg_fill
+            );
+        }
+
+        ui.horizontal(|ui| {
+            // Draw the folder icon and label.
+            //
+            // This block also handles responses.
+            ui.allocate_ui(egui::vec2(row_height, row_height), |ui| {
+                let icon_response = state.show_toggle_button(ui, move |ui, openness, response| {
+                    draw_outliner_node_icon(ui, openness, node.ty, response)
+                });
+
+                let label_response = ui.label(node.label());
+
+                // This is kind of hack, but the collapsing states responses kind of suck.
+                //
+                // We generate our own responses on the outliner row and label of the file, as the collapsing header does
+                // not respond to these by default. 
+                // We also need to ensure the icon is not below the cursor, as the icon lies within the outliner row. Otherwise
+                // the collapsing state itself will also respond and we will attempt to toggle the node twice.
+                if (row_response.clicked() || label_response.clicked()) && !icon_response.hovered() {
+                    state.toggle(ui);
+                }
+
+                // We also need separate context menus for the row and label responses, although they both display the same content.
+                row_response.context_menu(|ui| {
+                    todo!();
+                });
+
+                label_response.context_menu(|ui| {
+                    todo!();
+                });
+            });
+
+            if ui.rect_contains_pointer(row_rect) {
+                // Set a custom cursor to make the outliner feel more responsive.
+                ui.set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
+
+            let body_response = state.show_body_indented(&row_response, ui, |ui| {
+                // Render the children of this node.
+                for &child in node.children_keys() {
+                    // Then start the whole file tree process over again, but for this sub node.
+                    self.draw_file_tree(child, ui)?;
+                }
+
+                Ok::<(), SlipstreamError>(())
+            });
+
+            if let Some(egui::InnerResponse { inner, .. }) = body_response {
+                inner?;
+            }
+        });
+
+        Ok(())
+    }
+
+    /// Draws a file in the outliner.
+    /// 
+    /// This file will have no more subnodes.
+    fn draw_leaf_node(&self, node: &IrNode, ui: &mut egui::Ui) -> SlipstreamResult<()> {
+        ui.horizontal(|ui| {
+            ui.label(node.ty.closed_icon());
+
+            let response = ui.button(node.label());
+            if response.clicked() {
+                self.cmd_sender.send(PaneAction::RequestNewPane(RequestNewPane::Inspector {
+                    inspected: node.key()
+                })).expect("failed to send inspector pane open request");
+            }
+
+            response.context_menu(|ui| {
+                todo!("draw node context menu");
+            });
+        });
+
+        Ok(())
     }
 
     /// Draws the file tree under the current node.
@@ -50,135 +158,15 @@ impl OutlinerPane {
     ///
     /// If a specific node has been opened, this function returns the ID of its cache entry.
     fn draw_file_tree(&mut self, root_node: IrNodeKey, ui: &mut egui::Ui) -> SlipstreamResult<()> {
-        let curr_node_lock = self
-            .arena
-            .get(root_node)
-            .ok_or_else(|| {
-                SlipstreamError::from(InvalidInputError {
-                    reason: format!("virtual root node {} does not exist", root_node),
-                    ..Default::default()
-                })
-            })?
-            .clone();
+        self.arena.inspect(root_node, |curr_node| {
+            let node_ty = curr_node.ty;
 
-        let curr_node = curr_node_lock.read();
-        let node_kind = curr_node.kind;
-
-        // Persistent ID to make sure the `openness` state of the folders
-        // survives structural UI changes.
-        //
-        // This ID includes the outliner base ID as well since there may be multiple
-        // outliners.
-        let state_node_id =
-            ui.make_persistent_id(format!("outliner{}_state{}", self.root, curr_node.id));
-
-        if node_kind.is_expandable() {
-            let mut collapsing_state =
-                egui::collapsing_header::CollapsingState::load_with_default_open(
-                    ui.ctx(),
-                    state_node_id,
-                    false,
-                );
-
-            let row_height = ui.spacing().interact_size.y;
-            let row_rect = egui::Rect::from_min_size(
-                ui.cursor().min,
-                egui::vec2(ui.available_width(), row_height),
-            );
-
-            let row_response = ui.interact(
-                row_rect,
-                state_node_id.with("response"),
-                egui::Sense::click(),
-            );
-
-            // Draw a full width background when the cursor is hovering over the header.
-            if ui.rect_contains_pointer(row_rect) {
-                ui.painter().rect_filled(
-                    row_rect,
-                    ui.visuals().widgets.hovered.corner_radius,
-                    ui.visuals().widgets.hovered.bg_fill,
-                );
+            if node_ty.is_expandable() {
+                self.draw_directory_node(curr_node, ui)
+            } else {
+                self.draw_leaf_node(curr_node, ui)
             }
-
-            ui.horizontal(|ui| {
-                ui.allocate_ui(egui::vec2(row_height, row_height), |ui| {
-                    let node_kind = curr_node.kind;
-                    let icon_response =
-                        collapsing_state.show_toggle_button(ui, move |ui, openness, response| {
-                            draw_outliner_node_icon(ui, openness, node_kind, response)
-                        });
-
-                    let label_response = ui.label(&curr_node.label);
-
-                    if (row_response.clicked() || label_response.clicked())
-                        && !icon_response.hovered()
-                    {
-                        collapsing_state.toggle(ui);
-                    }
-
-                    row_response.context_menu(|ui| {
-                        curr_node.draw_context_menu(&mut self.cmd_sender, ui);
-                    });
-
-                    label_response.context_menu(|ui| {
-                        curr_node.draw_context_menu(&mut self.cmd_sender, ui);
-                    });
-                });
-            });
-
-            if ui.rect_contains_pointer(row_rect) {
-                ui.set_cursor_icon(egui::CursorIcon::PointingHand);
-            }
-
-            let body_response = collapsing_state.show_body_indented(&row_response, ui, |ui| {
-                // Render children if this node has already been evaluated.
-                if let Deferred::Evaluated(body) = &curr_node.body {
-                    for &child in &body.children {
-                        self.draw_file_tree(child, ui)?;
-                    }
-                } else {
-                    {
-                        drop(curr_node);
-                        let mut curr_node = curr_node_lock.write();
-                        curr_node.evaluate()?;
-                    }
-
-                    let curr_node = curr_node_lock.read();
-                    let Deferred::Evaluated(body) = &curr_node.body else {
-                        unreachable!()
-                    };
-
-                    for &child in &body.children {
-                        self.draw_file_tree(child, ui)?;
-                    }
-                }
-
-                Ok::<(), SlipstreamError>(())
-            });
-
-            if let Some(response) = body_response {
-                response.inner?;
-            }
-        } else {
-            ui.horizontal(|ui| {
-                ui.label(curr_node.kind.icon_closed());
-
-                let response = ui.button(&curr_node.label);
-
-                if response.clicked() {
-                    self.cmd_sender
-                        .send(PaneAction::RequestNewPane(RequestNewPane::Inspector {
-                            inspected: curr_node.id,
-                        }))
-                        .expect("failed to send inspector pane open request");
-                }
-
-                response.context_menu(|ui| {
-                    curr_node.draw_context_menu(&mut self.cmd_sender, ui);
-                });
-            });
-        }
+        }).transpose()?;
 
         Ok(())
     }

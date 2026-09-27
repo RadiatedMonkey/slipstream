@@ -10,12 +10,12 @@ use crate::{
 
 /// Position data that is stored directly inside of a draw call.
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum DirectPosition {
+pub enum InlinePosition {
     Xy([f32; 2]),
     Xyz([f32; 3]),
 }
 
-impl DirectPosition {
+impl InlinePosition {
     pub fn deserialize(
         reader: &mut RefCursor<[u8]>,
         decl: &GxVertexDeclaration,
@@ -61,7 +61,7 @@ pub enum PositionData {
     /// [`Shape`]: crate::format::mdl0::shape::Shape
     Index16(u16),
     /// The data for this vertex is stored directly inside of the draw call.
-    Direct(DirectPosition),
+    Direct(InlinePosition),
 }
 
 impl PositionData {
@@ -75,21 +75,21 @@ impl PositionData {
             VectorStorage::Index8 => PositionData::Index8(reader.read_u8()?),
             VectorStorage::Index16 => PositionData::Index16(reader.read_u16::<BigEndian>()?),
             VectorStorage::Direct => {
-                PositionData::Direct(DirectPosition::deserialize(reader, decl)?)
+                PositionData::Direct(InlinePosition::deserialize(reader, decl)?)
             }
         })
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum DirectNormal {
+pub enum InlineNormal {
     /// Stores only the normal
     Single([f32; 3]),
     /// Stores the normal, binormal and tangent in a single 9 float block.
     Packed([f32; 9]),
 }
 
-impl DirectNormal {
+impl InlineNormal {
     pub fn deserialize(
         reader: &mut RefCursor<[u8]>,
         decl: &GxVertexDeclaration,
@@ -125,7 +125,7 @@ pub enum NormalData {
     NotPresent,
     Index8(NormalIndex<u8>),
     Index16(NormalIndex<u16>),
-    Direct(DirectNormal),
+    Direct(InlineNormal),
 }
 
 impl NormalData {
@@ -158,7 +158,7 @@ impl NormalData {
 
                 NormalData::Index16(index)
             }
-            VectorStorage::Direct => NormalData::Direct(DirectNormal::deserialize(reader, decl)?),
+            VectorStorage::Direct => NormalData::Direct(InlineNormal::deserialize(reader, decl)?),
         })
     }
 }

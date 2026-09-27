@@ -1,3 +1,5 @@
+use slipstream_ir::node::node::IrNodeType;
+
 egui_phosphor::subset! {
     pub mod icons {
         use regular::{
@@ -30,6 +32,7 @@ macro_rules! fill_icon {
     };
 }
 
+/// Extends [`IrNodeType`], providing UI specific utilities to node types.
 pub trait NodeVisualsExt {
     /// Whether this node can be opened like a folder.
     fn is_expandable(&self) -> bool;

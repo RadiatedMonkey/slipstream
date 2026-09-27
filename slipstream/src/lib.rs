@@ -12,6 +12,8 @@ pub mod shared;
 #[cfg(target_arch = "wasm32")]
 mod web;
 
+use slipstream_shared::error::SlipstreamResult;
+
 use crate::app::App;
 
 /// Initialises the tracing subscriber for the current environment.

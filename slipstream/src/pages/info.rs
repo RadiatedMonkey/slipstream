@@ -1,6 +1,7 @@
+use slipstream_shared::error::SlipstreamResult;
+
 use crate::{
     cmd::AppCommandChannel,
-    error::SlipstreamResult,
     pages::{RoutablePage, intro::IntroPage},
     shared::GraphicsState,
 };

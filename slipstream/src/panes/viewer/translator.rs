@@ -4,29 +4,19 @@ use bytemuck::Zeroable;
 use parking_lot::{
     ArcRwLockReadGuard, MappedMutexGuard, MappedRwLockReadGuard, Mutex, MutexGuard, RwLockReadGuard,
 };
+use slipstream_ir::gx::GxOpCode;
+use slipstream_ir::gx::draw::{DrawOpCode, InlineNormal, InlinePosition, NormalData, OpVertex, PositionData};
+use slipstream_ir::mdl0::normals::NormalBuffer;
+use slipstream_ir::mdl0::polygon::Polygon;
+use slipstream_ir::mdl0::vertices::VertexBuffer;
+use slipstream_ir::node::arena::{IrArena, IrNodeKey};
+use slipstream_ir::node::node::IrNodeType;
+use slipstream_shared::error::{InvalidInputError, SlipstreamError, SlipstreamResult};
 use std::sync::Arc;
 use std::{any::Any, borrow::Cow, collections::HashMap};
 use wgpu::util::DeviceExt;
 
-use crate::format::mdl0::gx::draw::NormalIndex;
 use crate::panes::viewer::pipeline::{DEPTH_FORMAT, MSAA_SAMPLE_COUNT, TARGET_FORMAT};
-use crate::{
-    error::{InvalidInputError, SlipstreamError, SlipstreamResult},
-    format::mdl0::{
-        gx::{
-            GxOpCode,
-            draw::{DirectNormal, DirectPosition, DrawOpCode, NormalData, OpVertex, PositionData},
-        },
-        normals::{NormalBuf, NormalBufType},
-        shapes::Shape,
-        uvs::{UvBuf, UvDataType},
-        vertices::{VertexBuf, VertexPositionType},
-    },
-    node::{
-        node::{Inspectable, InspectableReadGuard, IrNodeType, VirtualNodeBody},
-        refs::{IrArena, IrNodeKey},
-    },
-};
 
 /// A vertex with all data interleaved.
 ///
@@ -72,18 +62,18 @@ pub struct IndexKey {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct DirectScratchBuffers {
+pub struct InlineScratchBuffers {
     pub positions: Vec<[f32; 3]>,
     pub normals: Vec<[f32; 3]>,
 }
 
-impl DirectScratchBuffers {
-    pub fn insert_position(&mut self, position: DirectPosition) -> IndexAttrKey {
+impl InlineScratchBuffers {
+    pub fn insert_position(&mut self, position: InlinePosition) -> IndexAttrKey {
         self.positions.push(position.to_xyz());
         IndexAttrKey::Synthetic(self.positions.len() as u32 - 1)
     }
 
-    pub fn insert_normal(&mut self, normal: DirectNormal) -> IndexAttrKey {
+    pub fn insert_normal(&mut self, normal: InlineNormal) -> IndexAttrKey {
         todo!()
     }
 }
@@ -260,12 +250,12 @@ pub struct PolygonScratch {
     pub indices: Vec<VertexIndex>,
     /// Direct draw call values are stored in here. They are given a new separate ID
     /// that is used to refer to them in the vertex map.
-    pub direct_data: DirectScratchBuffers,
+    pub direct_data: InlineScratchBuffers,
 }
 
 impl PolygonScratch {
     /// Creates the vertex buffer layout for the given shape.
-    fn discover_layout(shape: &Shape) -> PipelineDescriptor {
+    fn discover_layout(polygon: &Polygon) -> PipelineDescriptor {
         /// The basic layout that every pipeline will always contain.
         ///
         /// This contains just the position and the normal.
@@ -293,15 +283,15 @@ impl PolygonScratch {
         }
     }
 
-    pub fn new(shape: &Shape) -> Self {
-        let layout = Self::discover_layout(shape);
+    pub fn new(polygon: &Polygon) -> Self {
+        let layout = Self::discover_layout(polygon);
 
         Self {
             pipeline_descriptor: layout,
             vertex_map: HashMap::new(),
             vertices: Vec::new(),
             indices: Vec::new(),
-            direct_data: DirectScratchBuffers::default(),
+            direct_data: InlineScratchBuffers::default(),
         }
     }
 
@@ -381,7 +371,7 @@ impl ModelScratch {
     /// Resolves the given vertex, returning its assigned index.
     fn resolve_vertex(
         &self,
-        shape: &Shape,
+        polygon: &Polygon,
         vertex: &OpVertex,
         scratch: &mut PolygonScratch,
         stats: &mut TranslationStats,
@@ -435,7 +425,7 @@ impl ModelScratch {
             }
             // Otherwise insert the index and its vertex data into the map.
             None => {
-                let interleaved = self.generate_interleaved_vertex(shape, &index_key, scratch)?;
+                let interleaved = self.generate_interleaved_vertex(polygon, &index_key, scratch)?;
 
                 scratch.vertices.push(interleaved);
                 let new_index = VertexIndex(scratch.vertices.len() as IndexTy - 1);
@@ -456,7 +446,7 @@ impl ModelScratch {
     #[tracing::instrument(skip_all, fields(vertex_count = vertices.len()))]
     fn resolve_triangle_list(
         &self,
-        shape: &Shape,
+        polygon: &Polygon,
         vertices: &[OpVertex],
         scratch: &mut PolygonScratch,
         stats: &mut TranslationStats,
@@ -465,7 +455,7 @@ impl ModelScratch {
 
         scratch.indices.reserve(vertices.len());
         for vertex in vertices {
-            let resolved = self.resolve_vertex(shape, vertex, scratch, stats)?;
+            let resolved = self.resolve_vertex(polygon, vertex, scratch, stats)?;
             scratch.indices.push(resolved);
         }
 
@@ -480,7 +470,7 @@ impl ModelScratch {
     #[tracing::instrument(skip_all, fields(vertex_count = vertices.len()))]
     fn resolve_triangle_strip(
         &self,
-        shape: &InspectableReadGuard<Shape>,
+        shape: &InspectableReadGuard<Polygon>,
         vertices: &[OpVertex],
         scratch: &mut PolygonScratch,
         stats: &mut TranslationStats,
@@ -601,7 +591,7 @@ impl ModelScratch {
         Ok(bufs)
     }
 
-    pub fn get_vertices(&self, index: usize) -> SlipstreamResult<InspectableReadGuard<VertexBuf>> {
+    pub fn get_vertices(&self, index: usize) -> SlipstreamResult<InspectableReadGuard<VertexBuffer>> {
         let node_id = *self.positions.get(index).ok_or_else(|| {
             SlipstreamError::from(InvalidInputError {
                 reason: format!("vertex buffer {index} does not exist"),
@@ -610,7 +600,7 @@ impl ModelScratch {
         })?;
 
         self.map
-            .get_inspectable::<VertexBuf>(node_id)
+            .get_inspectable::<VertexBuffer>(node_id)
             .ok_or_else(|| {
                 SlipstreamError::from(InvalidInputError {
                     reason: format!("vertex buffer {index} was not found"),
@@ -619,7 +609,7 @@ impl ModelScratch {
             })
     }
 
-    pub fn get_normals(&self, index: usize) -> SlipstreamResult<InspectableReadGuard<NormalBuf>> {
+    pub fn get_normals(&self, index: usize) -> SlipstreamResult<InspectableReadGuard<NormalBuffer>> {
         let node_id = *self.normals.get(index).ok_or_else(|| {
             SlipstreamError::from(InvalidInputError {
                 reason: format!("normal buffer {index} does not exist"),
@@ -628,7 +618,7 @@ impl ModelScratch {
         })?;
 
         self.map
-            .get_inspectable::<NormalBuf>(node_id)
+            .get_inspectable::<NormalBuffer>(node_id)
             .ok_or_else(|| {
                 SlipstreamError::from(InvalidInputError {
                     reason: format!("normal buffer {index} was not found"),

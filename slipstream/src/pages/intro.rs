@@ -1,9 +1,10 @@
+use slipstream_shared::error::SlipstreamResult;
+
 use crate::editor::{Editor, OpenedFileInfo};
 use crate::shared::GraphicsState;
 use crate::{
     cmd::AppCommandChannel,
     decorations,
-    error::SlipstreamResult,
     pages::{RoutablePage, splash::BACKGROUND_TEXTURE},
 };
 

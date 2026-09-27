@@ -3,7 +3,7 @@ use std::{
     sync::mpsc,
 };
 
-use crate::node::arena::IrNodeKey;
+use slipstream_ir::node::arena::IrNodeKey;
 
 pub mod inspector;
 pub mod log;
@@ -38,6 +38,14 @@ pub trait Pane: Send + Sync {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum PaneId {
+    Outliner,
+    Inspector,
+    Viewer,
+    Log
+}
+
 /// Requests to the tile manager to open a new pane.
 ///
 /// If a pane with the exact same content signature is found, that pane will be focused instead.
@@ -62,28 +70,35 @@ pub enum RequestNewPane {
 }
 
 impl RequestNewPane {
+    pub const fn id(&self) -> PaneId {
+        match self {
+            Self::Outliner { .. } => PaneId::Outliner,
+            Self::Inspector { .. } => PaneId::Inspector,
+            Self::Viewer { .. } => PaneId::Viewer,
+            Self::Log => PaneId::Log
+        }
+    }
+
     /// Computes the content signature of the new pane.
     ///
     /// This is compared with existing tiles.
     pub fn content_signature(&self) -> ContentSignature {
+        let pane_id = self.id();
+
         let mut hasher = DefaultHasher::new();
+        pane_id.hash(&mut hasher);
 
         match self {
             RequestNewPane::Outliner { root } => {
-                "outliner".hash(&mut hasher);
                 root.hash(&mut hasher);
             }
             RequestNewPane::Inspector { inspected } => {
-                "inspector".hash(&mut hasher);
                 inspected.hash(&mut hasher);
             }
             RequestNewPane::Viewer { viewed } => {
-                "viewer".hash(&mut hasher);
                 viewed.hash(&mut hasher);
             }
-            RequestNewPane::Log => {
-                "log".hash(&mut hasher);
-            }
+            RequestNewPane::Log => {}
         }
 
         ContentSignature::from(hasher.finish())

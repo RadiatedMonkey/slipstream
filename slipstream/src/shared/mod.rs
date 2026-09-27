@@ -1,6 +1,5 @@
 pub mod camera;
 pub mod mem_logger;
-pub mod util;
 pub mod vertex;
 pub mod wgsl_include;
 pub mod widgets;

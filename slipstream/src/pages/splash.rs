@@ -1,6 +1,7 @@
 use std::sync::Mutex;
 
 use egui::load::SizedTexture;
+use slipstream_shared::error::SlipstreamResult;
 
 use crate::{
     cmd::AppCommandChannel,
@@ -67,7 +68,7 @@ impl RoutablePage for SplashPage {
         "Splash"
     }
 
-    fn draw(&mut self, ui: &mut egui::Ui) -> crate::error::SlipstreamResult<()> {
+    fn draw(&mut self, ui: &mut egui::Ui) -> SlipstreamResult<()> {
         egui::Area::new(egui::Id::new("splash_panel"))
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .show(ui, |ui| {

@@ -1,3 +1,5 @@
+use slipstream_shared::error::SlipstreamResult;
+
 use crate::{
     cmd::AppCommandChannel,
     config::APP_TITLE,

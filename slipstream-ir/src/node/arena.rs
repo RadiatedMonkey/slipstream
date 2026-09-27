@@ -18,6 +18,20 @@ use crate::node::node::{ContentSlot, IrNode, IrNodeType};
 #[repr(transparent)]
 pub struct IrNodeKey(NonZeroU64);
 
+/// Implementing [`Into`] instead of [`From`] so keys cannot be created by the user.
+impl Into<NonZeroU64> for IrNodeKey {
+    fn into(self) -> NonZeroU64 {
+        self.0
+    }
+}
+
+/// Implementing [`Into`] instead of [`From`] so keys cannot be created by the user.
+impl Into<u64> for IrNodeKey {
+    fn into(self) -> u64 {
+        self.0.get()
+    }
+}
+
 pub type IrNodeRef = Arc<RwLock<IrNode>>;
 
 pub struct IrNodeDescriptor {
@@ -98,6 +112,19 @@ impl IrArena {
         key
     }
 
+    /// Loads the given node and runs `inspect_fn` with a shared reference to it.
+    pub fn inspect<T, F>(&self, key: IrNodeKey, inspect_fn: F) -> Option<T>
+    where
+        F: FnOnce(&IrNode) -> T
+    {
+        let guard = self.map.read();
+        guard.get(&key).map(|lock| {
+            let guard = lock.write();
+            inspect_fn(&guard)
+        })    
+    }
+
+    /// Loads the given node and runs `update_fn` with a mutable reference to it.
     pub fn update<T, F>(&self, key: IrNodeKey, update_fn: F) -> Option<T>
     where
         F: FnOnce(&mut IrNode) -> T,

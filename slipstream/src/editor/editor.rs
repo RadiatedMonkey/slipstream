@@ -1,11 +1,12 @@
 use std::sync::mpsc;
 use std::{path::PathBuf, sync::Arc};
 
+use slipstream_ir::node::arena::IrNodeKey;
+use slipstream_shared::cursor::RefCursor;
+use slipstream_shared::error::SlipstreamResult;
+
 use crate::cmd::AppCommandChannel;
 use crate::decorations::{self, WindowState};
-use crate::error::{InvalidInputError, SlipstreamError, SlipstreamResult};
-use crate::node::arena::{IrArena, IrNodeKey, VirtualRefCacheMap};
-use crate::node::root::{self};
 use crate::pages::RoutablePage;
 use crate::pages::intro::IntroPage;
 use crate::panes::inspector::InspectorPane;
@@ -14,7 +15,6 @@ use crate::panes::outliner::OutlinerPane;
 use crate::panes::viewer::ViewerPane;
 use crate::panes::{ContentSignature, Pane, PaneAction, PaneBehavior, RequestNewPane};
 use crate::shared::GraphicsState;
-use crate::shared::util::RefCursor;
 
 pub struct Properties {
     pub label: String,

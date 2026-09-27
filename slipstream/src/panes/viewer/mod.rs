@@ -9,13 +9,12 @@ use std::{
 
 use eframe::egui_wgpu;
 use egui::mutex::RwLock;
+use slipstream_ir::node::arena::{IrArena, IrNodeKey};
+use slipstream_shared::error::SlipstreamResult;
 use wgpu::util::DeviceExt;
 
-use crate::error::SlipstreamError;
 use crate::panes::viewer::translator::DrawableModel;
 use crate::{
-    error::SlipstreamResult,
-    node::arena::{IrArena, IrNodeKey},
     panes::{
         ContentSignature, Pane, PaneAction,
         viewer::{
