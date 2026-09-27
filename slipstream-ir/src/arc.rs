@@ -6,9 +6,9 @@ use slipstream_shared::error::{
 
 use crate::brres::{self, BRRES_MAGIC};
 use crate::encoding::{ReadArrayExt, ReadStringExt};
-use crate::node::arena::{IrArena, IrNodeKey};
-use crate::node::defer::Deferred;
-use crate::node::node::{IrNode, IrNodeType, VirtualNodeBody};
+use crate::node::arena::{IrArena, IrNodeDescriptor, IrNodeKey};
+use crate::node::node::{ContentSlot, IrNode, IrNodeType};
+use crate::visitor::{Visitable, Visitor};
 
 /// Magic of an ARC file.
 pub const ARC_MAGIC: [u8; 4] = [0x55, 0xAA, 0x38, 0x2D];
@@ -143,44 +143,65 @@ impl Node {
     }
 }
 
+pub struct UnknownFile {
+    pub reader: RefCursor<[u8]>,
+}
+
+impl Visitable for UnknownFile {
+    fn accept(&self, visitor: &mut dyn Visitor) {
+        visitor.visit_unknown(self)
+    }
+}
+
 fn parse_leaf_node(
     reader: &mut RefCursor<[u8]>,
     parent_id: IrNodeKey,
     arena: &IrArena,
-    name: String,
+    label: String,
 ) -> SlipstreamResult<IrNodeKey> {
     let magic: [u8; 4] = reader.read_u8_array()?;
     reader.set_position(reader.position() - 4);
 
     match magic {
-        ARC_MAGIC => deserialize_virtual(reader, Some(parent_id), arena, name),
-        BRRES_MAGIC => brres::deserialize_virtual(reader, Some(parent_id), arena, name),
+        ARC_MAGIC => deserialize(reader, parent_id, arena, label),
+        BRRES_MAGIC => brres::deserialize_virtual(reader, parent_id, arena, label),
         _ => {
-            let id = arena.next_id();
-            let node = IrNode {
-                label: name,
-                key: id,
+            let key = arena.insert(IrNodeDescriptor {
+                label,
                 ty: IrNodeType::Unknown,
-                parent: Some(parent_id),
-                body: Deferred::evaluated(VirtualNodeBody {
-                    children: Vec::new(),
-                    inspectable: Some(Box::new(Raw {
-                        bytes: reader.clone(),
-                    })),
-                }),
-            };
+                parent: parent_id,
+                children: Vec::new(),
+                contents: ContentSlot::eager(Box::new(UnknownFile {
+                    reader: reader.clone(),
+                })),
+            });
 
-            arena.insert(id, node);
-            Ok(id)
+            Ok(key)
         }
     }
 }
 
-fn parse_directory_tree(
+pub struct ArcDirectory {
+    pub uncompressed_size: i32,
+}
+
+impl Visitable for ArcDirectory {
+    fn accept(&self, visitor: &mut dyn Visitor) {
+        visitor.visit_arc(self)
+    }
+}
+
+/// Constructs a tree of the directories in an ARC file.
+///
+/// ARC files store their nodes in a linear list, this function converts it into
+/// a tree by resolving references.
+#[tracing::instrument(skip_all, fields(label))]
+fn construct_directory_tree(
     node_list: &mut [Node],
-    parent_id: Option<IrNodeKey>,
+    parent: IrNodeKey,
     arena: &IrArena,
     label: String,
+    uncompressed_size: i32,
     cursor: &mut usize,
 ) -> SlipstreamResult<IrNodeKey> {
     let &NodeContent::Directory { skip_node, .. } = &node_list[*cursor].data else {
@@ -193,7 +214,7 @@ fn parse_directory_tree(
 
     *cursor += 1;
 
-    let id = arena.next_id();
+    let key = arena.reserve_key();
 
     let mut children = Vec::new();
     while *cursor < skip_node as usize && *cursor < node_list.len() {
@@ -202,11 +223,18 @@ fn parse_directory_tree(
         let name = std::mem::take(&mut curr_node.name);
         match &mut curr_node.data {
             NodeContent::Directory { .. } => {
-                let child = parse_directory_tree(node_list, Some(id), arena, name, cursor)?;
+                let child = construct_directory_tree(
+                    node_list,
+                    key,
+                    arena,
+                    name,
+                    uncompressed_size,
+                    cursor,
+                )?;
                 children.push(child);
             }
             NodeContent::File { data } => {
-                let sections = parse_leaf_node(data, id, arena, name)?;
+                let sections = parse_leaf_node(data, key, arena, name)?;
                 children.push(sections);
 
                 *cursor += 1;
@@ -214,26 +242,25 @@ fn parse_directory_tree(
         }
     }
 
-    let node = IrNode {
-        label,
-        key: id,
-        parent: parent_id,
-        ty: IrNodeType::ArcDirectory {
-            empty: children.is_empty(),
-        },
-        body: Deferred::evaluated(VirtualNodeBody {
+    arena.insert_at(
+        key,
+        IrNodeDescriptor {
+            label,
+            ty: IrNodeType::ArcDirectory {
+                empty: children.is_empty(),
+            },
+            parent,
             children,
-            inspectable: None,
-        }),
-    };
+            contents: ContentSlot::eager(Box::new(ArcDirectory { uncompressed_size })),
+        },
+    );
 
-    arena.insert(id, node);
-    Ok(id)
+    Ok(key)
 }
 
-pub fn deserialize_virtual(
+pub fn deserialize(
     reader: &mut RefCursor<[u8]>,
-    parent_id: Option<IrNodeKey>,
+    parent_id: IrNodeKey,
     arena: &IrArena,
     name: String,
 ) -> SlipstreamResult<IrNodeKey> {
@@ -285,7 +312,8 @@ pub fn deserialize_virtual(
     let mut cursor = 0;
 
     tracing::trace!("Constructing directory tree and parsing nodes...");
-    let ret = parse_directory_tree(&mut nodes, parent_id, arena, name, &mut cursor)?;
+    let ret =
+        construct_directory_tree(&mut nodes, parent_id, arena, name, header.size, &mut cursor)?;
     tracing::trace!("Constructed directory tree successfully");
     Ok(ret)
 }

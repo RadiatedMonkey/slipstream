@@ -1,11 +1,15 @@
-use crate::mdl0::{
-    bones::Bone, colors::ColorBuffer, definitions::Definitions, materials::MaterialBuffer,
-    normals::NormalBuffer, pal_links::PaletteLinks, polygon::Polygon, tevs::Tev,
-    tex_links::TextureLinks, uvs::UvBuffer, vertices::VertexBuffer,
+use crate::{
+    arc::{ArcDirectory, UnknownFile},
+    mdl0::{
+        bones::Bone, colors::ColorBuffer, definitions::Definitions, materials::MaterialBuffer,
+        normals::NormalBuffer, pal_links::PaletteLinks, polygon::Polygon, tevs::Tev,
+        tex_links::TextureLinks, uvs::UvBuffer, vertices::VertexBuffer,
+    },
 };
 
 #[allow(unused_variables)]
 pub trait Visitor {
+    fn visit_arc(&mut self, arc: &ArcDirectory) {}
     fn visit_definitions(&mut self, definitions: &Definitions) {}
     fn visit_bone(&mut self, bone: &Bone) {}
     fn visit_vertices(&mut self, vertex_buf: &VertexBuffer) {}
@@ -17,6 +21,7 @@ pub trait Visitor {
     fn visit_tev(&mut self, tev: &Tev) {}
     fn visit_palette_links(&mut self, links: &PaletteLinks) {}
     fn visit_texture_links(&mut self, links: &TextureLinks) {}
+    fn visit_unknown(&mut self, unknown: &UnknownFile) {}
 }
 
 pub trait Visitable {

@@ -3316,7 +3316,6 @@ dependencies = [
  "parking_lot",
  "paste",
  "slipstream-shared",
- "slotmap",
  "strum",
  "tracing",
 ]

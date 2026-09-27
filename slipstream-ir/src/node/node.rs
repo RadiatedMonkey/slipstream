@@ -12,13 +12,24 @@ pub struct DeferredPayload {
 }
 
 pub enum ContentSlot {
-    None,
+    /// The content has been evaluated eagerly, i.e. immediately.
+    ///
+    /// This should also be used when the node has no content.
+    Eager(Option<Box<dyn Visitable + Send + Sync>>),
     Lazy(OnceLock<Box<dyn Visitable + Send + Sync>>, DeferredPayload),
 }
 
 impl ContentSlot {
     pub fn lazy(reader: RefCursor<[u8]>, ty: IrNodeType) -> Self {
-        ContentSlot::Lazy(OnceLock::new(), DeferredPayload { reader, ty })
+        Self::Lazy(OnceLock::new(), DeferredPayload { reader, ty })
+    }
+
+    pub fn eager(content: Box<dyn Visitable + Send + Sync>) -> Self {
+        Self::Eager(Some(content))
+    }
+
+    pub const fn none() -> Self {
+        Self::Eager(None)
     }
 }
 
@@ -30,25 +41,25 @@ impl ContentSlot {
 pub struct IrNode {
     /// The label that is displayed in the outliner. This is pretty much only for visuals as the nodes mostly
     /// refer to each other with IDs instead of names.
-    label: String,
+    pub(super) label: String,
     /// The ID of this node. This is what other nodes use to refer to this one.
     ///
     /// This key should never be changed for a node and is therefore read-only.
-    key: IrNodeKey,
+    pub(super) key: IrNodeKey,
     /// Determines what type this node is. This affects how the node is displayed in the outliner and how
     /// other parts of the editor will treat this node. Setting the incorrect type for a node will likely cause
     /// a panic.
-    ty: IrNodeType,
+    pub(super) ty: IrNodeType,
     /// The parent of this node.
     ///
-    /// This will be `None` if the parent is unknown or this node does not have a parent.
-    parent: Option<IrNodeKey>,
+    /// This will be `null` if the parent is unknown or this node does not have a parent.
+    pub(super) parent: IrNodeKey,
     /// A list of keys of children of this node.
     ///
     /// This value may be lazily evaluated, i.e. it may not be known yet.
     /// By accessing this value, it will be evaluated.
-    children: Vec<IrNodeKey>,
-    contents: ContentSlot,
+    pub(super) children: Vec<IrNodeKey>,
+    pub(super) contents: ContentSlot,
 }
 
 impl IrNode {
@@ -70,7 +81,7 @@ impl IrNode {
 
     pub fn content(&self) -> Option<&(dyn Visitable + Send + Sync)> {
         match &self.contents {
-            ContentSlot::None => None,
+            ContentSlot::Eager(content) => content.as_deref(),
             ContentSlot::Lazy(lock, parser) => {
                 todo!()
             }

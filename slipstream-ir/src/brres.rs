@@ -10,10 +10,11 @@ use crate::encoding::ReadArrayExt;
 use crate::index::IndexGroup;
 use crate::mdl0::{self, MDL0_MAGIC};
 use crate::node::arena::{IrArena, IrNodeDescriptor, IrNodeKey};
-use crate::node::defer::Deferred;
-use crate::node::node::{IrNode, IrNodeType, VirtualNodeBody};
+use crate::node::node::{IrNode, IrNodeType};
 
+/// Equals "bres". This is always at the start of a BRRES file.
 pub const BRRES_MAGIC: [u8; 4] = [0x62, 0x72, 0x65, 0x73];
+
 const LE_BOM: [u8; 2] = [0xFF, 0xFE];
 const BE_BOM: [u8; 2] = [0xFE, 0xFF];
 
@@ -160,7 +161,7 @@ impl BFile for RootSection {
     const MAGIC: [u8; 4] = [0x72, 0x6f, 0x6f, 0x74]; // "root"
 }
 
-/// The header of a BRRRES section.
+/// The header of a BRRES subfile.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BFileHeader {
     /// Start position of this header. This is used to compute subfile section positions using their
@@ -235,7 +236,7 @@ pub enum BFileType {
     Pat0,
 }
 
-fn deserialize_subfile(
+fn deserialize_bfile(
     reader: &mut RefCursor<[u8]>,
     parent_id: IrNodeKey,
     arena: &IrArena,
@@ -245,32 +246,23 @@ fn deserialize_subfile(
     let magic = reader.read_u8_array::<4>()?;
 
     match magic {
-        MDL0_MAGIC => mdl0::deserialize_virtual(reader, parent_id, arena, name),
+        MDL0_MAGIC => mdl0::deserialize(reader, parent_id, arena, name),
         // Chr0Subfile::MAGIC => Chr0Subfile::deserialize_lazy(reader),
         _ => {
-            let id = arena.next_id();
-            let node = IrNode::from(IrNode {
-                label: String::from("TODO, UNPARSED FORMAT"),
-                key: id,
-                parent: Some(parent_id),
+            let key = arena.insert(IrNodeDescriptor {
+                label: String::from("<unparsed>"),
                 ty: IrNodeType::Unknown,
-                body: Deferred::evaluated(VirtualNodeBody {
-                    children: Vec::new(),
-                    inspectable: Some(Box::new(Raw {
-                        bytes: reader.clone(),
-                    })),
-                }),
+                contents: ContentSlot::
             });
 
-            arena.insert(id, node);
-            Ok(id)
+            Ok(key)
         }
     }
 }
 
 pub fn deserialize_virtual(
     reader: &mut RefCursor<[u8]>,
-    parent_id: Option<IrNodeKey>,
+    parent_id: IrNodeKey,
     arena: &IrArena,
     name: String,
 ) -> SlipstreamResult<IrNodeKey> {
@@ -329,7 +321,7 @@ pub fn deserialize_virtual(
                 }
 
                 let file = tracing::trace_span!("deserialize_subfile", %dir_name, %subfile_name)
-                    .in_scope(|| deserialize_subfile(&mut reader, dir_id, &arena2, subfile_name))?;
+                    .in_scope(|| deserialize_bfile(&mut reader, dir_id, &arena2, subfile_name))?;
 
                 subfiles.push(file);
             }

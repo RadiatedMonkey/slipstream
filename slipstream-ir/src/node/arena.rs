@@ -1,10 +1,44 @@
+use std::{
+    collections::HashMap,
+    num::NonZeroU64,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+};
+
+use parking_lot::RwLock;
+
 use crate::node::node::{ContentSlot, IrNode, IrNodeType};
 
-slotmap::new_key_type! { pub struct IrNodeKey; }
+/// A key that can be used to refer to a node.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct IrNodeKey(Option<NonZeroU64>);
+
+/// Simple wrapper around a key that cannot be cloned.
+///
+/// This ensures that a reserved key does not accidentally get reused.
+#[derive(Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct ReservedIrNodeKey(IrNodeKey);
+
+impl IrNodeKey {
+    pub const fn null() -> Self {
+        Self(None)
+    }
+
+    pub const fn is_null(&self) -> bool {
+        self.0.is_none()
+    }
+}
+
+pub type IrNodeRef = Arc<RwLock<IrNode>>;
 
 pub struct IrNodeDescriptor {
     pub label: String,
     pub ty: IrNodeType,
+    pub parent: IrNodeKey,
     pub children: Vec<IrNodeKey>,
     pub contents: ContentSlot,
 }
@@ -14,23 +48,84 @@ impl Default for IrNodeDescriptor {
         Self {
             label: String::from("<null>"),
             ty: IrNodeType::Unknown,
+            parent: IrNodeKey::null(),
             children: Vec::new(),
-            contents: ContentSlot::None,
+            contents: const { ContentSlot::none() },
         }
     }
 }
 
-#[derive(Default)]
 pub struct IrArena {
-    map: slotmap::SlotMap<IrNodeKey, IrNode>,
+    counter: AtomicU64,
+    map: RwLock<HashMap<IrNodeKey, IrNodeRef>>,
 }
 
 impl IrArena {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            counter: AtomicU64::new(1),
+            map: RwLock::new(HashMap::new()),
+        }
     }
 
+    /// Reserves a key for future use.
+    ///
+    /// The keys returned by this function are guaranteed to be unique, but
+    /// may not be monotonic.
+    pub fn reserve_key(&self) -> IrNodeKey {
+        IrNodeKey(NonZeroU64::new(
+            self.counter.fetch_add(1, Ordering::Relaxed),
+        ))
+    }
+
+    /// Inserts a node at a previously reserved location.
+    pub fn insert_at(&self, key: IrNodeKey, desc: IrNodeDescriptor) {
+        self.map.write().insert(
+            key,
+            Arc::new(RwLock::new(IrNode {
+                label: desc.label,
+                ty: desc.ty,
+                parent: desc.parent,
+                key,
+                children: desc.children,
+                contents: desc.contents,
+            })),
+        );
+    }
+
+    /// Inserts a node, returning its assigned key.
     pub fn insert(&self, desc: IrNodeDescriptor) -> IrNodeKey {
-        todo!()
+        let key = self.reserve_key();
+
+        self.map.write().insert(
+            key,
+            Arc::new(RwLock::new(IrNode {
+                label: desc.label,
+                ty: desc.ty,
+                parent: desc.parent,
+                key,
+                children: desc.children,
+                contents: desc.contents,
+            })),
+        );
+
+        key
+    }
+
+    pub fn update<T, F>(&self, key: IrNodeKey, update_fn: F) -> Option<T>
+    where
+        F: FnOnce(&mut IrNode) -> Option<T>,
+    {
+        let mut guard = self.map.write();
+        guard.get_mut(&key).and_then(|lock| {
+            let mut guard = lock.write();
+            update_fn(&mut guard)
+        })
+    }
+}
+
+impl Default for IrArena {
+    fn default() -> Self {
+        Self::new()
     }
 }

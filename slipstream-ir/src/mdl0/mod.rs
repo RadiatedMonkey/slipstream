@@ -270,7 +270,7 @@ pub struct Model {
 }
 
 #[tracing::instrument(skip_all, fields(name, parent_id))]
-pub fn deserialize_virtual(
+pub fn deserialize(
     reader: &mut RefCursor<[u8]>,
     parent_id: IrNodeKey,
     arena: &IrArena,
