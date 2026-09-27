@@ -1,3 +1,5 @@
+use std::ops::ControlFlow;
+
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::{CorruptionError, SlipstreamResult};
@@ -164,7 +166,7 @@ impl Definitions {
 }
 
 impl Visitable for Definitions {
-    fn accept(&self, visitor: &mut dyn Visitor) {
+    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_definitions(self)
     }
 }

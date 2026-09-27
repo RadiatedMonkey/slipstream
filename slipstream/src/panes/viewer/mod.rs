@@ -34,7 +34,7 @@ pub struct ViewerPane {
     cmd_sender: mpsc::Sender<PaneAction>,
     content_sig: ContentSignature,
     node: Option<IrNodeKey>,
-    arena: IrArena,
+    arena: Arc<IrArena>,
 
     model: Option<DrawableModel>,
     render_state: GraphicsState,
@@ -46,14 +46,16 @@ impl ViewerPane {
         cmd_sender: mpsc::Sender<PaneAction>,
         content_sig: ContentSignature,
         mdl0_node: Option<IrNodeKey>,
-        arena: IrArena,
+        arena: Arc<IrArena>,
         render_state: GraphicsState,
     ) -> SlipstreamResult<Box<dyn Pane>> {
-        let model = mdl0_node
-            .map(|node| ModelScratch::from_root(node, arena.clone()))
-            .transpose()?
-            .map(|bufs| bufs.resolve_shapes(&render_state.device))
-            .transpose()?;
+        // let model = mdl0_node
+        //     .map(|node| ModelScratch::from_root(node, Arc::clone(&arena)))
+        //     .transpose()?
+        //     .map(|bufs| bufs.resolve_shapes(&render_state.device))
+        //     .transpose()?;
+        
+        let model = None;
 
         let pipeline = ViewerPipeline::new(render_state.clone());
         render_state

@@ -21,17 +21,15 @@ use crate::node::{
 #[repr(transparent)]
 pub struct IrNodeKey(NonZeroU64);
 
-// Implementing [`Into`] instead of [`From`] so keys cannot be created by the user.
-impl Into<NonZeroU64> for IrNodeKey {
-    fn into(self) -> NonZeroU64 {
-        self.0
+impl From<IrNodeKey> for NonZeroU64 {
+    fn from(value: IrNodeKey) -> Self {
+        value.0
     }
 }
 
-// Implementing [`Into`] instead of [`From`] so keys cannot be created by the user.
-impl Into<u64> for IrNodeKey {
-    fn into(self) -> u64 {
-        self.0.get()
+impl From<IrNodeKey> for u64 {
+    fn from(value: IrNodeKey) -> Self {
+        value.0.get()
     }
 }
 

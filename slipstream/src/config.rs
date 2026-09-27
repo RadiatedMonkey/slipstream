@@ -3,7 +3,7 @@ use std::time::Duration;
 pub const FILE_INDENTATION_SIZE: f32 = 8.0;
 pub const LAUNCH_DELAY: Duration = Duration::from_millis(500);
 pub const DEFAULT_SIZE: egui::Vec2 = egui::Vec2::new(800.0, 600.0);
-pub const APP_TITLE: &str = "Mario Kart Wii Editor";
+pub const APP_TITLE: &str = "Slipstream Editor";
 
 /// Configures the egui style to use for the dark theme.
 pub fn configure_dark_style() -> egui::Style {

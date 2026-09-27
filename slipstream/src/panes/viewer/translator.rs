@@ -5,13 +5,17 @@ use parking_lot::{
     ArcRwLockReadGuard, MappedMutexGuard, MappedRwLockReadGuard, Mutex, MutexGuard, RwLockReadGuard,
 };
 use slipstream_ir::gx::GxOpCode;
-use slipstream_ir::gx::draw::{DrawOpCode, InlineNormal, InlinePosition, NormalData, OpVertex, PositionData};
+use slipstream_ir::gx::draw::{
+    DrawOpCode, InlineNormal, InlinePosition, NormalData, NormalIndex, OpVertex, PositionData,
+};
 use slipstream_ir::mdl0::normals::NormalBuffer;
 use slipstream_ir::mdl0::polygon::Polygon;
 use slipstream_ir::mdl0::vertices::VertexBuffer;
 use slipstream_ir::node::arena::{IrArena, IrNodeKey};
 use slipstream_ir::node::node::IrNodeType;
+use slipstream_ir::visitor::Visitor;
 use slipstream_shared::error::{InvalidInputError, SlipstreamError, SlipstreamResult};
+use std::ops::ControlFlow;
 use std::sync::Arc;
 use std::{any::Any, borrow::Cow, collections::HashMap};
 use wgpu::util::DeviceExt;
@@ -193,32 +197,32 @@ impl ModelPolygon {
         pass.draw_indexed(0..self.index_count, 0, 0..1);
     }
 
-    pub fn from_scratch(
-        device: &wgpu::Device,
-        shape: &InspectableReadGuard<Shape>,
-        scratch: &PolygonScratch,
-        pipeline_registry: &mut PipelineRegistry,
-    ) -> Self {
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some(&format!("{} vertex buffer", shape.label())),
-            usage: wgpu::BufferUsages::VERTEX,
-            contents: bytemuck::cast_slice(&scratch.vertices),
-        });
-
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some(&format!("{} index buffer", shape.label())),
-            usage: wgpu::BufferUsages::INDEX,
-            contents: bytemuck::cast_slice(&scratch.indices),
-        });
-
-        let pipeline = pipeline_registry.get(&scratch.pipeline_descriptor);
-        Self {
-            pipeline: pipeline.clone(),
-            vertex_buffer,
-            index_buffer,
-            index_count: scratch.indices.len() as u32,
-        }
-    }
+    // pub fn from_scratch(
+    //     device: &wgpu::Device,
+    //     polygon: &Polygon,
+    //     scratch: &PolygonScratch,
+    //     pipeline_registry: &mut PipelineRegistry,
+    // ) -> Self {
+    //     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    //         label: Some(&format!("{} vertex buffer", polygon.label())),
+    //         usage: wgpu::BufferUsages::VERTEX,
+    //         contents: bytemuck::cast_slice(&scratch.vertices),
+    //     });
+    //
+    //     let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    //         label: Some(&format!("{} index buffer", polygon.label())),
+    //         usage: wgpu::BufferUsages::INDEX,
+    //         contents: bytemuck::cast_slice(&scratch.indices),
+    //     });
+    //
+    //     let pipeline = pipeline_registry.get(&scratch.pipeline_descriptor);
+    //     Self {
+    //         pipeline: pipeline.clone(),
+    //         vertex_buffer,
+    //         index_buffer,
+    //         index_count: scratch.indices.len() as u32,
+    //     }
+    // }
 }
 
 pub struct DrawableModel {
@@ -304,326 +308,288 @@ impl PolygonScratch {
 
 #[derive(Clone)]
 pub struct ModelScratch {
-    pub map: IrArena,
+    pub map: Arc<IrArena>,
 
     pub positions: Vec<IrNodeKey>,
     pub normals: Vec<IrNodeKey>,
     pub colors: Vec<IrNodeKey>,
     pub uvs: Vec<IrNodeKey>,
-    pub shapes: Vec<IrNodeKey>,
+    pub polygons: Vec<IrNodeKey>,
 }
 
 const POSITION_DEFAULT: [f32; 3] = [0.0; 3];
 const NORMAL_DEFAULT: [f32; 3] = [0.0, 1.0, 0.0];
 
 impl ModelScratch {
-    pub fn new(map: IrArena) -> Self {
+    pub fn new(map: Arc<IrArena>) -> Self {
         Self {
             map,
             positions: Vec::new(),
             normals: Vec::new(),
             colors: Vec::new(),
             uvs: Vec::new(),
-            shapes: Vec::new(),
+            polygons: Vec::new(),
         }
     }
 
-    /// Creates a new interleaved vertex by resolving all indices in the key.
-    fn generate_interleaved_vertex(
-        &self,
-        shape: &Shape,
-        index_key: &IndexKey,
-        scratch: &PolygonScratch,
-    ) -> SlipstreamResult<InterleavedVertex> {
-        let position = match index_key.position {
-            IndexAttrKey::NotPresent => POSITION_DEFAULT,
-            IndexAttrKey::Physical(idx) => {
-                let position_buffer = self.get_vertices(shape.vertex_array_id as usize)?;
-                position_buffer
-                    .get_xyz(idx as usize)
-                    .expect("vertex did not exist in position buffer")
-            }
-            IndexAttrKey::Synthetic(idx) => *scratch
-                .direct_data
-                .positions
-                .get(idx as usize)
-                .expect("position did not exist in direct data buffer"),
-        };
-
-        let normals = match index_key.normals {
-            IndexAttrKey::NotPresent => NORMAL_DEFAULT,
-            IndexAttrKey::Physical(idx) => {
-                let normal_buffer = self.get_normals(shape.normal_array_id as usize)?;
-                normal_buffer
-                    .get_normal(idx as usize)
-                    .expect("vertex did not exist in normal buffer")
-            }
-            IndexAttrKey::Synthetic(idx) => *scratch
-                .direct_data
-                .normals
-                .get(idx as usize)
-                .expect("normal did not exist in direct data buffer"),
-        };
-
-        Ok(InterleavedVertex { position, normals })
-    }
-
-    /// Resolves the given vertex, returning its assigned index.
-    fn resolve_vertex(
-        &self,
-        polygon: &Polygon,
-        vertex: &OpVertex,
-        scratch: &mut PolygonScratch,
-        stats: &mut TranslationStats,
-    ) -> SlipstreamResult<VertexIndex> {
-        let mut index_key = IndexKey::default();
-
-        // Generate the index.
-
-        match &vertex.position {
-            PositionData::NotPresent => index_key.position = IndexAttrKey::NotPresent,
-            PositionData::Index8(idx) => {
-                index_key.position = IndexAttrKey::Physical(*idx as IndexTy)
-            }
-            PositionData::Index16(idx) => {
-                index_key.position = IndexAttrKey::Physical(*idx as IndexTy)
-            }
-            PositionData::Direct(x) => {
-                let sid = scratch.direct_data.insert_position(*x);
-                index_key.position = sid;
-            }
-        }
-
-        match &vertex.normals {
-            NormalData::NotPresent => index_key.normals = IndexAttrKey::NotPresent,
-            NormalData::Index8(idx) => match idx {
-                NormalIndex::Single(idx) => {
-                    index_key.normals = IndexAttrKey::Physical(*idx as IndexTy)
-                }
-                NormalIndex::Triple(idxs) => todo!("multi normal indices"),
-            },
-            NormalData::Index16(idx) => match idx {
-                NormalIndex::Single(idx) => {
-                    index_key.normals = IndexAttrKey::Physical(*idx as IndexTy)
-                }
-                NormalIndex::Triple(idxs) => todo!("multi normal indices"),
-            },
-            NormalData::Direct(x) => {
-                let sid = scratch.direct_data.insert_normal(x.clone());
-                index_key.normals = sid;
-            }
-        }
-
-        // Check if the index has already been seen before. In case it hasn't
-        // a new index will be generated.
-        let translated_index = match scratch.vertex_map.get(&index_key) {
-            // If the given multi index has already been seen before, load its translated
-            // index.
-            Some(&x) => {
-                stats.reused_indices += 1;
-                x
-            }
-            // Otherwise insert the index and its vertex data into the map.
-            None => {
-                let interleaved = self.generate_interleaved_vertex(polygon, &index_key, scratch)?;
-
-                scratch.vertices.push(interleaved);
-                let new_index = VertexIndex(scratch.vertices.len() as IndexTy - 1);
-
-                scratch.vertex_map.insert(index_key.clone(), new_index);
-
-                new_index
-            }
-        };
-
-        Ok(translated_index)
-    }
-
-    /// Resolves a list of triangles.
-    ///
-    /// This is the most straightforward topology as it maps straight to what the editor's
-    /// graphics pipeline uses.
-    #[tracing::instrument(skip_all, fields(vertex_count = vertices.len()))]
-    fn resolve_triangle_list(
-        &self,
-        polygon: &Polygon,
-        vertices: &[OpVertex],
-        scratch: &mut PolygonScratch,
-        stats: &mut TranslationStats,
-    ) -> SlipstreamResult<()> {
-        tracing::trace!("Resolving a {} triangle list", vertices.len());
-
-        scratch.indices.reserve(vertices.len());
-        for vertex in vertices {
-            let resolved = self.resolve_vertex(polygon, vertex, scratch, stats)?;
-            scratch.indices.push(resolved);
-        }
-
-        Ok(())
-    }
-
-    /// Resolves a triangle strip topology.
-    ///
-    /// While wgpu also supports triangle strip topologies, the topology is converted into a
-    /// basic triangle list. Since a render pipeline is only capable of rendering a single toplogy, this
-    /// reduces the amount of pipelines that have to be created.
-    #[tracing::instrument(skip_all, fields(vertex_count = vertices.len()))]
-    fn resolve_triangle_strip(
-        &self,
-        shape: &InspectableReadGuard<Polygon>,
-        vertices: &[OpVertex],
-        scratch: &mut PolygonScratch,
-        stats: &mut TranslationStats,
-    ) -> SlipstreamResult<()> {
-        tracing::trace!("Resolving a {} triangle strip", vertices.len());
-
-        let expanded_len = (vertices.len() - 2) * 3;
-        scratch.indices.reserve(expanded_len);
-
-        for (i, [v1, v2, v3]) in vertices.array_windows().enumerate() {
-            let r1 = self.resolve_vertex(shape, v1, scratch, stats)?;
-            let r2 = self.resolve_vertex(shape, v2, scratch, stats)?;
-            let r3 = self.resolve_vertex(shape, v3, scratch, stats)?;
-
-            if i % 2 == 0 {
-                // Even triangles should keep their original winding order.
-                scratch.indices.extend([r1, r2, r3]);
-            } else {
-                // Odd triangle should have their first two vertices reversed.
-                scratch.indices.extend([r2, r1, r3]);
-            }
-        }
-
-        Ok(())
-    }
-
-    #[tracing::instrument(skip_all, fields(shape = shape.label(), id = shape.id().into_inner()))]
-    fn resolve_shape(
-        &self,
-        shape: &InspectableReadGuard<Shape>,
-    ) -> SlipstreamResult<PolygonScratch> {
-        let mut scratch = PolygonScratch::new(shape);
-        let mut stats = TranslationStats::default();
-
-        tracing::trace!(
-            "Resolving {} draw calls",
-            shape.vertex_data_gx.commands.len(),
-        );
-
-        for call in &shape.vertex_data_gx.commands {
-            match call {
-                GxOpCode::DrawTriangles(DrawOpCode { vertices }) => {
-                    self.resolve_triangle_list(&shape, vertices, &mut scratch, &mut stats)?;
-                }
-                GxOpCode::DrawTriangleStrip(DrawOpCode { vertices }) => {
-                    self.resolve_triangle_strip(&shape, vertices, &mut scratch, &mut stats)?;
-                }
-                _ => tracing::error!("unsupported opcode: {call:?}"),
-            }
-        }
-
-        dbg!(&stats);
-
-        Ok(scratch)
-    }
-
-    #[tracing::instrument(skip_all)]
-    pub fn resolve_shapes(&self, device: &wgpu::Device) -> SlipstreamResult<DrawableModel> {
-        tracing::trace!("Resolving {} shapes", self.shapes.len());
-
-        let mut pipeline_registry = PipelineRegistry::new(device);
-        let mut model = DrawableModel {
-            polygons: Vec::with_capacity(self.shapes.len()),
-        };
-
-        for &shape_id in &self.shapes {
-            let shape = self.map.get_inspectable::<Shape>(shape_id).ok_or_else(|| {
-                SlipstreamError::from(InvalidInputError {
-                    reason: format!("virtual node {shape_id} did not exist"),
-                    ..Default::default()
-                })
-            })?;
-
-            let scratch = self.resolve_shape(&shape)?;
-            let polygon =
-                ModelPolygon::from_scratch(device, &shape, &scratch, &mut pipeline_registry);
-
-            model.polygons.push(polygon);
-        }
-
-        Ok(model)
-    }
+    // /// Creates a new interleaved vertex by resolving all indices in the key.
+    // fn generate_interleaved_vertex(
+    //     &self,
+    //     polygon: &Polygon,
+    //     index_key: &IndexKey,
+    //     scratch: &PolygonScratch,
+    // ) -> SlipstreamResult<InterleavedVertex> {
+    //     let position = match index_key.position {
+    //         IndexAttrKey::NotPresent => POSITION_DEFAULT,
+    //         IndexAttrKey::Physical(idx) => {
+    //             let position_buffer = self.get_vertices(polygon.vertex_array_id as usize)?;
+    //             position_buffer
+    //                 .get_xyz(idx as usize)
+    //                 .expect("vertex did not exist in position buffer")
+    //         }
+    //         IndexAttrKey::Synthetic(idx) => *scratch
+    //             .direct_data
+    //             .positions
+    //             .get(idx as usize)
+    //             .expect("position did not exist in direct data buffer"),
+    //     };
+    //
+    //     let normals = match index_key.normals {
+    //         IndexAttrKey::NotPresent => NORMAL_DEFAULT,
+    //         IndexAttrKey::Physical(idx) => {
+    //             let normal_buffer = self.get_normals(polygon.normal_array_id as usize)?;
+    //             normal_buffer
+    //                 .get_normal(idx as usize)
+    //                 .expect("vertex did not exist in normal buffer")
+    //         }
+    //         IndexAttrKey::Synthetic(idx) => *scratch
+    //             .direct_data
+    //             .normals
+    //             .get(idx as usize)
+    //             .expect("normal did not exist in direct data buffer"),
+    //     };
+    //
+    //     Ok(InterleavedVertex { position, normals })
+    // }
+    //
+    // /// Resolves the given vertex, returning its assigned index.
+    // fn resolve_vertex(
+    //     &self,
+    //     polygon: &Polygon,
+    //     vertex: &OpVertex,
+    //     scratch: &mut PolygonScratch,
+    //     stats: &mut TranslationStats,
+    // ) -> SlipstreamResult<VertexIndex> {
+    //     let mut index_key = IndexKey::default();
+    //
+    //     // Generate the index.
+    //
+    //     match &vertex.position {
+    //         PositionData::NotPresent => index_key.position = IndexAttrKey::NotPresent,
+    //         PositionData::Index8(idx) => {
+    //             index_key.position = IndexAttrKey::Physical(*idx as IndexTy)
+    //         }
+    //         PositionData::Index16(idx) => {
+    //             index_key.position = IndexAttrKey::Physical(*idx as IndexTy)
+    //         }
+    //         PositionData::Direct(x) => {
+    //             let sid = scratch.direct_data.insert_position(*x);
+    //             index_key.position = sid;
+    //         }
+    //     }
+    //
+    //     match &vertex.normals {
+    //         NormalData::NotPresent => index_key.normals = IndexAttrKey::NotPresent,
+    //         NormalData::Index8(idx) => match idx {
+    //             NormalIndex::Single(idx) => {
+    //                 index_key.normals = IndexAttrKey::Physical(*idx as IndexTy)
+    //             }
+    //             NormalIndex::Triple(idxs) => todo!("multi normal indices"),
+    //         },
+    //         NormalData::Index16(idx) => match idx {
+    //             NormalIndex::Single(idx) => {
+    //                 index_key.normals = IndexAttrKey::Physical(*idx as IndexTy)
+    //             }
+    //             NormalIndex::Triple(idxs) => todo!("multi normal indices"),
+    //         },
+    //         NormalData::Direct(x) => {
+    //             let sid = scratch.direct_data.insert_normal(x.clone());
+    //             index_key.normals = sid;
+    //         }
+    //     }
+    //
+    //     // Check if the index has already been seen before. In case it hasn't
+    //     // a new index will be generated.
+    //     let translated_index = match scratch.vertex_map.get(&index_key) {
+    //         // If the given multi index has already been seen before, load its translated
+    //         // index.
+    //         Some(&x) => {
+    //             stats.reused_indices += 1;
+    //             x
+    //         }
+    //         // Otherwise insert the index and its vertex data into the map.
+    //         None => {
+    //             let interleaved = self.generate_interleaved_vertex(polygon, &index_key, scratch)?;
+    //
+    //             scratch.vertices.push(interleaved);
+    //             let new_index = VertexIndex(scratch.vertices.len() as IndexTy - 1);
+    //
+    //             scratch.vertex_map.insert(index_key.clone(), new_index);
+    //
+    //             new_index
+    //         }
+    //     };
+    //
+    //     Ok(translated_index)
+    // }
+    //
+    // /// Resolves a list of triangles.
+    // ///
+    // /// This is the most straightforward topology as it maps straight to what the editor's
+    // /// graphics pipeline uses.
+    // #[tracing::instrument(skip_all, fields(vertex_count = vertices.len()))]
+    // fn resolve_triangle_list(
+    //     &self,
+    //     polygon: &Polygon,
+    //     vertices: &[OpVertex],
+    //     scratch: &mut PolygonScratch,
+    //     stats: &mut TranslationStats,
+    // ) -> SlipstreamResult<()> {
+    //     tracing::trace!("Resolving a {} triangle list", vertices.len());
+    //
+    //     scratch.indices.reserve(vertices.len());
+    //     for vertex in vertices {
+    //         let resolved = self.resolve_vertex(polygon, vertex, scratch, stats)?;
+    //         scratch.indices.push(resolved);
+    //     }
+    //
+    //     Ok(())
+    // }
+    //
+    // /// Resolves a triangle strip topology.
+    // ///
+    // /// While wgpu also supports triangle strip topologies, the topology is converted into a
+    // /// basic triangle list. Since a render pipeline is only capable of rendering a single toplogy, this
+    // /// reduces the amount of pipelines that have to be created.
+    // #[tracing::instrument(skip_all, fields(vertex_count = vertices.len()))]
+    // fn resolve_triangle_strip(
+    //     &self,
+    //     shape: &Polygon,
+    //     vertices: &[OpVertex],
+    //     scratch: &mut PolygonScratch,
+    //     stats: &mut TranslationStats,
+    // ) -> SlipstreamResult<()> {
+    //     tracing::trace!("Resolving a {} triangle strip", vertices.len());
+    //
+    //     let expanded_len = (vertices.len() - 2) * 3;
+    //     scratch.indices.reserve(expanded_len);
+    //
+    //     for (i, [v1, v2, v3]) in vertices.array_windows().enumerate() {
+    //         let r1 = self.resolve_vertex(shape, v1, scratch, stats)?;
+    //         let r2 = self.resolve_vertex(shape, v2, scratch, stats)?;
+    //         let r3 = self.resolve_vertex(shape, v3, scratch, stats)?;
+    //
+    //         if i % 2 == 0 {
+    //             // Even triangles should keep their original winding order.
+    //             scratch.indices.extend([r1, r2, r3]);
+    //         } else {
+    //             // Odd triangle should have their first two vertices reversed.
+    //             scratch.indices.extend([r2, r1, r3]);
+    //         }
+    //     }
+    //
+    //     Ok(())
+    // }
+    //
+    // #[tracing::instrument(skip_all, fields(shape = shape.label(), id = shape.id().into_inner()))]
+    // fn resolve_shape(&self, polygon: &Polygon) -> SlipstreamResult<PolygonScratch> {
+    //     let mut scratch = PolygonScratch::new(polygon);
+    //     let mut stats = TranslationStats::default();
+    //
+    //     tracing::trace!(
+    //         "Resolving {} draw calls",
+    //         polygon.vertex_data_gx.commands.len(),
+    //     );
+    //
+    //     for call in &polygon.vertex_data_gx.commands {
+    //         match call {
+    //             GxOpCode::DrawTriangles(DrawOpCode { vertices }) => {
+    //                 self.resolve_triangle_list(&polygon, vertices, &mut scratch, &mut stats)?;
+    //             }
+    //             GxOpCode::DrawTriangleStrip(DrawOpCode { vertices }) => {
+    //                 self.resolve_triangle_strip(&polygon, vertices, &mut scratch, &mut stats)?;
+    //             }
+    //             _ => tracing::error!("unsupported opcode: {call:?}"),
+    //         }
+    //     }
+    //
+    //     dbg!(&stats);
+    //
+    //     Ok(scratch)
+    // }
+    //
+    // #[tracing::instrument(skip_all)]
+    // pub fn resolve_shapes(&self, device: &wgpu::Device) -> SlipstreamResult<DrawableModel> {
+    //     tracing::trace!("Resolving {} shapes", self.polygons.len());
+    //
+    //     let mut pipeline_registry = PipelineRegistry::new(device);
+    //     let mut model = DrawableModel {
+    //         polygons: Vec::with_capacity(self.polygons.len()),
+    //     };
+    //
+    //     for &shape_id in &self.polygons {
+    //         // let shape = self.map.get_inspectable::<Shape>(shape_id).ok_or_else(|| {
+    //         //     SlipstreamError::from(InvalidInputError {
+    //         //         reason: format!("virtual node {shape_id:?} did not exist"),
+    //         //         ..Default::default()
+    //         //     })
+    //         // })?;
+    //
+    //         let scratch = self.resolve_shape(&shape)?;
+    //         let polygon =
+    //             ModelPolygon::from_scratch(device, &shape, &scratch, &mut pipeline_registry);
+    //
+    //         model.polygons.push(polygon);
+    //     }
+    //
+    //     Ok(model)
+    // }
 
     #[tracing::instrument(skip_all, fields(node))]
-    pub fn from_root(node: IrNodeKey, map: IrArena) -> SlipstreamResult<Self> {
+    pub fn from_root(root: IrNodeKey, map: Arc<IrArena>) -> SlipstreamResult<Self> {
         tracing::trace!("Constructing model buffer block from MDL0 file");
 
-        let mut bufs = Self::new(map.clone());
+        let mut bufs = Self::new(Arc::clone(&map));
+        map.inspect(root, |node| {
+            for &child in &node.children {
+                // Ensure we do not deadlock.
+                if child == root {
+                    tracing::error!("model node reference itself, skipping it");
+                    continue;
+                }
 
-        let root_children = map.get_children(node).ok_or_else(|| {
+                let opt = map.inspect(child, |child| match child.ty {
+                    IrNodeType::VertexBuffer => bufs.positions.push(child.key()),
+                    IrNodeType::NormalBuffer => bufs.normals.push(child.key()),
+                    IrNodeType::ColorBuffer => bufs.colors.push(child.key()),
+                    IrNodeType::UvBuffer => bufs.uvs.push(child.key()),
+                    IrNodeType::Polygon => bufs.polygons.push(child.key()),
+                    _ => {}
+                });
+
+                if opt.is_none() {
+                    tracing::warn!("child node {child:?} was not found, skipping it");
+                }
+            }
+        })
+        .ok_or_else(|| {
             SlipstreamError::from(InvalidInputError {
-                reason: format!("virtual node {node} did not exist"),
+                reason: format!("root model node was not found"),
                 ..Default::default()
             })
         })?;
-
-        for &section_id in &root_children {
-            let children = map
-                .get_children(section_id)
-                .expect("unable to find children of node");
-
-            for &child in &children {
-                let handle = map.get(child).expect("did not find child node");
-                let guard = handle.read();
-
-                match guard.kind {
-                    IrNodeType::Vertices => bufs.positions.push(child),
-                    IrNodeType::Normals => bufs.normals.push(child),
-                    IrNodeType::Colors => bufs.colors.push(child),
-                    IrNodeType::Uvs => bufs.uvs.push(child),
-                    IrNodeType::Shape => bufs.shapes.push(child),
-                    _ => {}
-                }
-            }
-        }
 
         tracing::trace!("Constructed model buffer block successfully");
         Ok(bufs)
-    }
-
-    pub fn get_vertices(&self, index: usize) -> SlipstreamResult<InspectableReadGuard<VertexBuffer>> {
-        let node_id = *self.positions.get(index).ok_or_else(|| {
-            SlipstreamError::from(InvalidInputError {
-                reason: format!("vertex buffer {index} does not exist"),
-                ..Default::default()
-            })
-        })?;
-
-        self.map
-            .get_inspectable::<VertexBuffer>(node_id)
-            .ok_or_else(|| {
-                SlipstreamError::from(InvalidInputError {
-                    reason: format!("vertex buffer {index} was not found"),
-                    ..Default::default()
-                })
-            })
-    }
-
-    pub fn get_normals(&self, index: usize) -> SlipstreamResult<InspectableReadGuard<NormalBuffer>> {
-        let node_id = *self.normals.get(index).ok_or_else(|| {
-            SlipstreamError::from(InvalidInputError {
-                reason: format!("normal buffer {index} does not exist"),
-                ..Default::default()
-            })
-        })?;
-
-        self.map
-            .get_inspectable::<NormalBuffer>(node_id)
-            .ok_or_else(|| {
-                SlipstreamError::from(InvalidInputError {
-                    reason: format!("normal buffer {index} was not found"),
-                    ..Default::default()
-                })
-            })
     }
 }

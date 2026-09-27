@@ -1,3 +1,5 @@
+use std::ops::ControlFlow;
+
 use bitfield_struct::bitenum;
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::cursor::RefCursor;
@@ -132,14 +134,14 @@ impl NormalBuffer {
 }
 
 impl Visitable for NormalBuffer {
-    fn accept(&self, visitor: &mut dyn Visitor) {
+    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_normals(self)
     }
 }
 
 impl DeserializeSection for NormalBuffer {
     const NAME: &str = "Normals";
-    const KIND: IrNodeType = IrNodeType::Normals;
+    const KIND: IrNodeType = IrNodeType::NormalBuffer;
 
     fn deserialize_section(
         reader: &mut RefCursor<[u8]>,

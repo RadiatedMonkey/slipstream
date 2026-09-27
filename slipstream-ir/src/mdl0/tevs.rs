@@ -1,3 +1,5 @@
+use std::ops::ControlFlow;
+
 use crate::encoding::ReadArrayExt;
 use crate::gx::GxBytecode;
 
@@ -15,8 +17,8 @@ pub struct Tev {
 }
 
 impl Visitable for Tev {
-    fn accept(&self, visitor: &mut dyn Visitor) {
-        visitor.visit_tev(self);
+    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_tev(self)
     }
 }
 

@@ -5,7 +5,6 @@ use std::{
 
 use slipstream_ir::node::arena::IrNodeKey;
 
-pub mod inspector;
 pub mod log;
 pub mod outliner;
 pub mod viewer;
@@ -43,7 +42,7 @@ pub enum PaneId {
     Outliner,
     Inspector,
     Viewer,
-    Log
+    Log,
 }
 
 /// Requests to the tile manager to open a new pane.
@@ -75,7 +74,7 @@ impl RequestNewPane {
             Self::Outliner { .. } => PaneId::Outliner,
             Self::Inspector { .. } => PaneId::Inspector,
             Self::Viewer { .. } => PaneId::Viewer,
-            Self::Log => PaneId::Log
+            Self::Log => PaneId::Log,
         }
     }
 

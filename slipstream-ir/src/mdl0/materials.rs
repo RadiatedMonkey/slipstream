@@ -1,3 +1,5 @@
+use std::ops::ControlFlow;
+
 use bitfield_struct::{bitenum, bitfield};
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::{
@@ -608,7 +610,7 @@ pub struct MaterialBuffer {
 }
 
 impl Visitable for MaterialBuffer {
-    fn accept(&self, visitor: &mut dyn Visitor) {
+    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_material(self)
     }
 }

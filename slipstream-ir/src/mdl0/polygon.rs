@@ -1,3 +1,5 @@
+use std::ops::ControlFlow;
+
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::{
     cursor::RefCursor,
@@ -207,7 +209,7 @@ pub struct Polygon {
 }
 
 impl Visitable for Polygon {
-    fn accept(&self, visitor: &mut dyn Visitor) {
+    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_polygon(self)
     }
 }

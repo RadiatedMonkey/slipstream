@@ -1,7 +1,8 @@
 use std::sync::mpsc;
 use std::{path::PathBuf, sync::Arc};
 
-use slipstream_ir::node::arena::IrNodeKey;
+use slipstream_ir::node::arena::{IrArena, IrNodeKey};
+use slipstream_ir::node::root;
 use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::SlipstreamResult;
 
@@ -9,7 +10,6 @@ use crate::cmd::AppCommandChannel;
 use crate::decorations::{self, WindowState};
 use crate::pages::RoutablePage;
 use crate::pages::intro::IntroPage;
-use crate::panes::inspector::InspectorPane;
 use crate::panes::log::LogPane;
 use crate::panes::outliner::OutlinerPane;
 use crate::panes::viewer::ViewerPane;
@@ -61,7 +61,7 @@ pub struct Editor {
     pub file_info: OpenedFileInfo,
     /// The root node of the file.
     pub file_base_node: IrNodeKey,
-    pub arena: IrArena,
+    pub arena: Arc<IrArena>,
 
     pub pane_behavior: PaneBehavior,
     pub pane_tree: egui_tiles::Tree<Box<dyn Pane>>,
@@ -76,7 +76,7 @@ impl Editor {
         let contents = file_info.content();
         let cursor = RefCursor::new(Arc::<[u8]>::from(contents));
 
-        let arena = Arc::new(VirtualRefCacheMap::new());
+        let arena = Arc::new(IrArena::new());
         let root_node =
             root::deserialize_maybe_compressed(cursor, &arena, file_info.file_name().to_owned())?;
 
@@ -186,12 +186,13 @@ impl Editor {
                 root,
                 self.arena.clone(),
             ),
-            RequestNewPane::Inspector { inspected } => InspectorPane::new(
-                self.pane_behavior.sender.clone(),
-                content_sig,
-                inspected,
-                self.arena.clone(),
-            ),
+            // RequestNewPane::Inspector { inspected } => InspectorPane::new(
+            //     self.pane_behavior.sender.clone(),
+            //     content_sig,
+            //     inspected,
+            //     self.arena.clone(),
+            // ),
+            RequestNewPane::Inspector { inspected } => todo!("implement inspector"),
             RequestNewPane::Viewer { viewed } => ViewerPane::new(
                 self.pane_behavior.sender.clone(),
                 content_sig,

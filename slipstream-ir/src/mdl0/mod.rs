@@ -10,6 +10,8 @@ pub mod tex_links;
 pub mod uvs;
 pub mod vertices;
 
+use std::ops::ControlFlow;
+
 use crate::brres::{self, BFileHeader, BFileType};
 use crate::encoding::ReadArrayExt;
 use crate::mdl0::colors::ColorBuffer;
@@ -281,8 +283,8 @@ pub struct Model {
 }
 
 impl Visitable for Model {
-    fn accept(&self, visitor: &mut dyn Visitor) {
-        visitor.visit_mdl0(self);
+    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_mdl0(self)
     }
 }
 

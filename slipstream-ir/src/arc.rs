@@ -1,3 +1,5 @@
+use std::ops::ControlFlow;
+
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::{
@@ -148,7 +150,7 @@ pub struct UnknownFile {
 }
 
 impl Visitable for UnknownFile {
-    fn accept(&self, visitor: &mut dyn Visitor) {
+    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_unknown(self)
     }
 }
@@ -186,7 +188,7 @@ pub struct ArcDirectory {
 }
 
 impl Visitable for ArcDirectory {
-    fn accept(&self, visitor: &mut dyn Visitor) {
+    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_arc(self)
     }
 }

@@ -1,3 +1,5 @@
+use std::ops::ControlFlow;
+
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::{cursor::RefCursor, error::SlipstreamResult};
 
@@ -28,8 +30,8 @@ pub struct PaletteLinks {
 }
 
 impl Visitable for PaletteLinks {
-    fn accept(&self, visitor: &mut dyn Visitor) {
-        visitor.visit_palette_links(self);
+    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_palette_links(self)
     }
 }
 

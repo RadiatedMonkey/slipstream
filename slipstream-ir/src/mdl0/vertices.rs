@@ -1,3 +1,5 @@
+use std::ops::ControlFlow;
+
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::{CorruptionError, SlipstreamResult};
@@ -104,8 +106,8 @@ impl VertexBuffer {
 }
 
 impl Visitable for VertexBuffer {
-    fn accept(&self, visitor: &mut dyn Visitor) {
-        visitor.visit_vertices(self);
+    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_vertices(self)
     }
 }
 

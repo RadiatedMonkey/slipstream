@@ -1,3 +1,5 @@
+use std::ops::ControlFlow;
+
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::{
     cursor::RefCursor,
@@ -47,14 +49,14 @@ pub struct UvBuffer {
 }
 
 impl Visitable for UvBuffer {
-    fn accept(&self, visitor: &mut dyn Visitor) {
+    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_uvs(self)
     }
 }
 
 impl DeserializeSection for UvBuffer {
     const NAME: &str = "UVs";
-    const KIND: IrNodeType = IrNodeType::Uvs;
+    const KIND: IrNodeType = IrNodeType::UvBuffer;
 
     #[tracing::instrument(skip_all, fields(header_start))]
     fn deserialize_section(

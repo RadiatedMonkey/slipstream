@@ -1,3 +1,5 @@
+use std::ops::ControlFlow;
+
 use bitfield_struct::bitfield;
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::{
@@ -233,7 +235,7 @@ impl Bone {
 }
 
 impl Visitable for Bone {
-    fn accept(&self, visitor: &mut dyn Visitor) {
+    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_bone(self)
     }
 }

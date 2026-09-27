@@ -49,14 +49,16 @@ pub trait NodeVisualsExt {
 impl NodeVisualsExt for IrNodeType {
     fn is_expandable(&self) -> bool {
         match self {
-            Self::ArcDirectory { empty: false } | Self::BrresDirectory => true,
+            Self::ArcDirectory { empty: false } | Self::BrresDirectory | Self::BrresFile => true,
             _ => false,
         }
     }
 
     fn open_icon(&self) -> egui::RichText {
         match self {
-            Self::ArcDirectory { empty: false } | Self::BrresDirectory => reg_icon!(FOLDER_OPEN),
+            Self::ArcDirectory { empty: false } | Self::BrresDirectory | Self::BrresFile => {
+                reg_icon!(FOLDER_OPEN)
+            }
             _ => unimplemented!("cannot call `NodeVisualsExt::open_icon` on a non-expandable node"),
         }
     }
@@ -65,17 +67,18 @@ impl NodeVisualsExt for IrNodeType {
         match self {
             Self::ArcDirectory { empty: false } | Self::BrresDirectory => reg_icon!(FOLDER),
             Self::ArcDirectory { empty: true } => reg_icon!(FOLDER_DASHED),
+            Self::BrresFile => reg_icon!(FOLDER),
             Self::Mdl0Root => reg_icon!(PERSON),
-            Self::Bytecode => reg_icon!(FILE_CODE),
+            Self::Definitions => reg_icon!(FILE_CODE),
             Self::Bone { end: false } => reg_icon!(BONE),
             Self::Bone { end: true } => fill_icon!(BONE),
-            Self::Vertices => reg_icon!(POLYGON),
-            Self::Normals => reg_icon!(ARROW_ELBOW_RIGHT),
-            Self::Colors => reg_icon!(PAINT_BRUSH_HOUSEHOLD),
-            Self::Uvs => reg_icon!(BOUNDING_BOX),
-            Self::Materials => reg_icon!(PALETTE),
+            Self::VertexBuffer => reg_icon!(POLYGON),
+            Self::NormalBuffer => reg_icon!(ARROW_ELBOW_RIGHT),
+            Self::ColorBuffer => reg_icon!(PAINT_BRUSH_HOUSEHOLD),
+            Self::UvBuffer => reg_icon!(BOUNDING_BOX),
+            Self::Material => reg_icon!(PALETTE),
             Self::Tevs => reg_icon!(GRAPHICS_CARD),
-            Self::Shape => reg_icon!(CUBE),
+            Self::Polygon => reg_icon!(CUBE),
             Self::TextureLinks => reg_icon!(LINK),
             Self::PaletteLinks => reg_icon!(LINK),
             Self::Unknown => reg_icon!(FILE),

@@ -60,17 +60,6 @@ impl ContentSlot {
     }
 }
 
-pub enum ContentResult<'a> {
-    /// This node has no content.
-    Empty,
-    /// This node is still being parsed.
-    ///
-    /// Poll the contents later to retrieve its contents.
-    Pending,
-    /// This node's content has completely been parsed.
-    Ready(&'a (dyn Visitable + Send + Sync)),
-}
-
 /// A node in the filesystem. The editor's file system consists of just a tree with IDs (+ node types). The file contents
 /// are stored in a central cache instead of in the tree.
 ///
@@ -147,10 +136,10 @@ pub enum IrNodeType {
     /// A vertex buffer in an MDL0 file.
     VertexBuffer,
     /// A normal buffer in an MDL0 file.
-    Normals,
+    NormalBuffer,
     /// A color buffer in an MDL0 file.
-    Colors,
-    Uvs,
+    ColorBuffer,
+    UvBuffer,
     Material,
     Tevs,
     Polygon,

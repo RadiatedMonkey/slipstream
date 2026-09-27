@@ -1,3 +1,5 @@
+use std::ops::ControlFlow;
+
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::{cursor::RefCursor, error::SlipstreamResult};
 
@@ -28,7 +30,7 @@ pub struct TextureLinks {
 }
 
 impl Visitable for TextureLinks {
-    fn accept(&self, visitor: &mut dyn Visitor) {
+    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_texture_links(self)
     }
 }

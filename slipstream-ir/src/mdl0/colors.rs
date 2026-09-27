@@ -1,3 +1,5 @@
+use std::ops::ControlFlow;
+
 use bitfield_struct::bitenum;
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::{
@@ -231,14 +233,14 @@ pub fn deserialize_color(
 }
 
 impl Visitable for ColorBuffer {
-    fn accept(&self, visitor: &mut dyn Visitor) {
+    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_colors(self)
     }
 }
 
 impl DeserializeSection for ColorBuffer {
     const NAME: &str = "Colors";
-    const KIND: IrNodeType = IrNodeType::Colors;
+    const KIND: IrNodeType = IrNodeType::ColorBuffer;
 
     fn deserialize_section(
         reader: &mut RefCursor<[u8]>,
