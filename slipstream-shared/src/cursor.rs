@@ -87,7 +87,7 @@ impl<T: AsRef<[u8]> + ?Sized> RefCursor<T> {
     }
 }
 
-impl<T> Clone for RefCursor<T> {
+impl<T: ?Sized> Clone for RefCursor<T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),

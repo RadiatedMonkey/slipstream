@@ -1,9 +1,9 @@
 use crate::encoding::ReadArrayExt;
 use crate::gx::GxBytecode;
-use crate::index::IndexGroup;
-use crate::node::arena::{IrArena, IrNodeKey};
-use crate::node::defer::Deferred;
-use crate::node::node::{IrNodeType, VirtualNode, VirtualNodeBody};
+
+use crate::node::node::IrNodeType;
+use crate::section::DeserializeSection;
+use crate::visitor::{Visitable, Visitor};
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::SlipstreamResult;
@@ -14,8 +14,20 @@ pub struct Tev {
     pub bytecode: GxBytecode,
 }
 
-impl Tev {
-    fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
+impl Visitable for Tev {
+    fn accept(&self, visitor: &mut dyn Visitor) {
+        visitor.visit_tev(self);
+    }
+}
+
+impl DeserializeSection for Tev {
+    const KIND: IrNodeType = IrNodeType::Tevs;
+
+    #[tracing::instrument(skip_all, fields(header_start = _header_start))]
+    fn deserialize_section(
+        reader: &mut RefCursor<[u8]>,
+        _header_start: u64,
+    ) -> SlipstreamResult<Self> {
         let length = reader.read_u32::<BigEndian>()?;
         let mdl0_offset = reader.read_i32::<BigEndian>()?;
         let index = reader.read_i32::<BigEndian>()?;
@@ -34,44 +46,4 @@ impl Tev {
             bytecode,
         })
     }
-}
-
-#[tracing::instrument(skip_all, fields(parent_id))]
-pub fn deserialize_virtual(
-    reader: &mut RefCursor<[u8]>,
-    parent_id: IrNodeKey,
-    arena: &IrArena,
-) -> SlipstreamResult<VirtualNodeBody> {
-    let section_index = IndexGroup::deserialize(reader)?;
-
-    let mut tevs = Vec::with_capacity(section_index.entries.len() - 1);
-    for entry in &section_index.entries[1..] {
-        let name = section_index.get_entry_name(reader, entry)?;
-        let data_start = section_index.get_entry_data_start(entry);
-
-        reader.set_position(data_start as u64);
-
-        let tev = Tev::deserialize(reader)?;
-        let id = arena.next_id();
-        let node = VirtualNode {
-            label: name,
-            id,
-            parent: Some(parent_id),
-            kind: IrNodeType::Tevs,
-            body: Deferred::evaluated(VirtualNodeBody {
-                children: Vec::new(),
-                inspectable: Some(Box::new(tev)),
-            }),
-        };
-
-        arena.insert(id, node);
-        tevs.push(id);
-    }
-
-    tracing::error!("TODO TEVS");
-
-    Ok(VirtualNodeBody {
-        children: tevs,
-        inspectable: None,
-    })
 }

@@ -9,13 +9,9 @@ use slipstream_shared::{
 use crate::{
     encoding::ReadArrayExt,
     gx::load_bp::{AlphaFunction, BlendMode, ConstantAlpha, DepthTest, LoadBpOpCode},
-    index::IndexGroup,
     mdl0::TextureMatrixMode,
-    node::{
-        arena::{IrArena, IrNodeKey},
-        defer::Deferred,
-        node::{IrNodeType, VirtualNode, VirtualNodeBody},
-    },
+    node::node::IrNodeType,
+    section::DeserializeSection,
     visitor::{Visitable, Visitor},
 };
 
@@ -611,8 +607,19 @@ pub struct MaterialBuffer {
     pub texture_references: Vec<TextureReference>,
 }
 
-impl MaterialBuffer {
-    fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
+impl Visitable for MaterialBuffer {
+    fn accept(&self, visitor: &mut dyn Visitor) {
+        visitor.visit_material(self)
+    }
+}
+
+impl DeserializeSection for MaterialBuffer {
+    const KIND: IrNodeType = IrNodeType::Material;
+
+    fn deserialize_section(
+        reader: &mut RefCursor<[u8]>,
+        _header_start: u64,
+    ) -> SlipstreamResult<Self> {
         let material_start = reader.position();
         let _length = reader.read_u32::<BigEndian>()?;
         let _mdl0_offset = reader.read_i32::<BigEndian>()?;
@@ -643,9 +650,9 @@ impl MaterialBuffer {
         let mode_offset = reader.read_i32::<BigEndian>()?; // does not exist in v9 MDL0 or lower.
 
         let used_texture_maps = UsedTextureMaps::deserialize(reader)?;
-        let precompiled_texture_code = reader.read_u8_array::<160>()?;
+        let _precompiled_texture_code = reader.read_u8_array::<160>()?;
         let used_palettes = UsedPalettes::deserialize(reader)?;
-        let precompiled_palette_code = reader.read_u8_array::<160>()?;
+        let _precompiled_palette_code = reader.read_u8_array::<160>()?;
         let layer_settings = LayerSettings::deserialize(reader)?;
         let texture_matrix_mode = TextureMatrixMode::deserialize(reader)?;
         let light_channel_settings = [
@@ -725,49 +732,4 @@ impl MaterialBuffer {
             texture_references,
         })
     }
-}
-
-impl Visitable for MaterialBuffer {
-    fn accept(&self, visitor: &mut dyn Visitor) {
-        visitor.visit_material(self)
-    }
-}
-
-#[tracing::instrument(skip_all, fields(parent_id))]
-pub fn deserialize_virtual(
-    reader: &mut RefCursor<[u8]>,
-    header_start: u32,
-    parent_id: IrNodeKey,
-    arena: &IrArena,
-) -> SlipstreamResult<VirtualNodeBody> {
-    let section_index = IndexGroup::deserialize(reader)?;
-
-    let mut materials = Vec::with_capacity(section_index.entries.len() - 1);
-    for entry in &section_index.entries[1..] {
-        let name = section_index.get_entry_name(reader, entry)?;
-        let data_start = section_index.get_entry_data_start(entry);
-
-        reader.set_position(data_start as u64);
-
-        let material = MaterialBuffer::deserialize(reader)?;
-        let id = arena.next_id();
-        let node = VirtualNode {
-            label: name,
-            id,
-            parent: Some(parent_id),
-            ty: IrNodeType::Materials,
-            body: Deferred::evaluated(VirtualNodeBody {
-                children: Vec::new(),
-                inspectable: Some(Box::new(material)),
-            }),
-        };
-
-        arena.insert(id, node);
-        materials.push(id);
-    }
-
-    Ok(VirtualNodeBody {
-        children: materials,
-        inspectable: None,
-    })
 }

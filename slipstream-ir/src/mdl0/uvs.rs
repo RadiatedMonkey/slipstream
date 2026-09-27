@@ -6,12 +6,8 @@ use slipstream_shared::{
 
 use crate::{
     encoding::ReadArrayExt,
-    index::IndexGroup,
-    node::{
-        defer::Deferred,
-        node::{IrNodeType, VirtualNode, VirtualNodeBody},
-        refs::{IrArena, IrNodeKey},
-    },
+    node::node::IrNodeType,
+    section::DeserializeSection,
     util::{VectorDivisor, VertexFormat, deserialize_scalar_data, deserialize_vector_data},
     visitor::{Visitable, Visitor},
 };
@@ -26,12 +22,12 @@ pub enum UvDataType {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum UvBufData {
+pub enum UvData {
     S(Vec<f32>),
     St(Vec<[f32; 2]>),
 }
 
-impl UvBufData {
+impl UvData {
     pub fn ty(&self) -> UvDataType {
         match self {
             Self::S(_) => UvDataType::S,
@@ -41,17 +37,29 @@ impl UvBufData {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct UvBuf {
+pub struct UvBuffer {
     pub index: u32,
     pub format: VertexFormat,
     pub stride: u8,
-    pub uvs: UvBufData,
+    pub uvs: UvData,
     pub bounding_volume_min: [f32; 2],
     pub bounding_volume_max: [f32; 2],
 }
 
-impl UvBuf {
-    pub fn deserialize(reader: &mut RefCursor<[u8]>, header_start: u32) -> SlipstreamResult<Self> {
+impl Visitable for UvBuffer {
+    fn accept(&self, visitor: &mut dyn Visitor) {
+        visitor.visit_uvs(self)
+    }
+}
+
+impl DeserializeSection for UvBuffer {
+    const KIND: IrNodeType = IrNodeType::Uvs;
+
+    #[tracing::instrument(skip_all, fields(header_start))]
+    fn deserialize_section(
+        reader: &mut RefCursor<[u8]>,
+        header_start: u64,
+    ) -> SlipstreamResult<Self> {
         let _length = reader.read_u32::<BigEndian>()?;
         let _mdl0_offset = reader.read_i32::<BigEndian>()?;
         let data_offset = reader.read_i32::<BigEndian>()?;
@@ -70,13 +78,13 @@ impl UvBuf {
         reader.set_position(uv_start as u64);
 
         let uvs = match component_count {
-            COMPONENTS_S => UvBufData::S(deserialize_scalar_data(
+            COMPONENTS_S => UvData::S(deserialize_scalar_data(
                 reader,
                 uv_count as usize,
                 format,
                 VectorDivisor::Custom(divisor),
             )?),
-            COMPONENTS_ST => UvBufData::St(deserialize_vector_data::<2>(
+            COMPONENTS_ST => UvData::St(deserialize_vector_data::<2>(
                 reader,
                 uv_count as usize,
                 format,
@@ -100,50 +108,4 @@ impl UvBuf {
             bounding_volume_max,
         })
     }
-}
-
-impl Visitable for UvBuf {
-    fn accept(&self, visitor: &mut dyn Visitor) {
-        visitor.visit_uvs(self)
-    }
-}
-
-#[tracing::instrument(skip_all, fields(parent_id))]
-pub fn deserialize_virtual(
-    reader: &mut RefCursor<[u8]>,
-    header_start: u32,
-    parent_id: IrNodeKey,
-    arena: &IrArena,
-) -> SlipstreamResult<VirtualNodeBody> {
-    let section_index = IndexGroup::deserialize(reader)?;
-
-    let mut children = Vec::with_capacity(section_index.entries.len() - 1);
-    for entry in &section_index.entries[1..] {
-        let name = section_index.get_entry_name(reader, entry)?;
-        let data_start = section_index.get_entry_data_start(entry);
-
-        reader.set_position(data_start as u64);
-
-        let uvs = UvBuf::deserialize(reader, header_start)?;
-
-        let id = arena.next_id();
-        let node = VirtualNode {
-            label: name,
-            id,
-            kind: IrNodeType::Uvs,
-            parent: Some(parent_id),
-            body: Deferred::evaluated(VirtualNodeBody {
-                children: Vec::new(),
-                inspectable: Some(Box::new(uvs)),
-            }),
-        };
-
-        arena.insert(id, node);
-        children.push(id);
-    }
-
-    Ok(VirtualNodeBody {
-        children,
-        inspectable: None,
-    })
 }

@@ -5,13 +5,15 @@ use slipstream_shared::{
 };
 
 use crate::{
-    encoding::ReadArrayExt, gx::{
+    encoding::ReadArrayExt,
+    gx::{
         GxBytecode, GxOpCode,
         load_cp::{CpVatA, CpVatB, CpVatC, CpVcdHi, CpVcdLo, LoadCpOpCode},
         load_xf::{LoadXfOpCode, LoadXfPayload},
-    }, index::IndexGroup, node::{
-        arena::{IrArena, IrNodeKey}, defer::Deferred, node::{ChildrenSlot, ContentSlot, IrNode, IrNodeType, VirtualNodeBody},
-    }, visitor::{Visitable, Visitor},
+    },
+    node::node::IrNodeType,
+    section::DeserializeSection,
+    visitor::{Visitable, Visitor},
 };
 
 /// Maps shape local matrix IDs to global ones.
@@ -204,8 +206,20 @@ pub struct Polygon {
     pub vertex_data_gx: GxBytecode,
 }
 
-impl Polygon {
-    pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
+impl Visitable for Polygon {
+    fn accept(&self, visitor: &mut dyn Visitor) {
+        visitor.visit_polygon(self)
+    }
+}
+
+impl DeserializeSection for Polygon {
+    const KIND: IrNodeType = IrNodeType::Polygon;
+
+    #[tracing::instrument(skip_all, fields(header_start = _header_start))]
+    fn deserialize_section(
+        reader: &mut RefCursor<[u8]>,
+        _header_start: u64,
+    ) -> SlipstreamResult<Self> {
         let object_start = reader.position();
         let length = reader.read_u32::<BigEndian>()?;
         let mdl0_offset = reader.read_i32::<BigEndian>()?;
@@ -290,52 +304,4 @@ impl Polygon {
             vertex_data_gx,
         })
     }
-}
-
-impl Visitable for Polygon {
-    fn accept(&self, visitor: &mut dyn Visitor) {
-        visitor.visit_polygon(self)
-    }
-}
-
-#[tracing::instrument(skip_all, fields(parent_id))]
-pub fn deserialize_virtual(
-    reader: &mut RefCursor<[u8]>,
-    header_start: u32,
-    parent_id: IrNodeKey,
-    arena: &IrArena,
-) -> SlipstreamResult<VirtualNodeBody> {
-    let section_index = IndexGroup::deserialize(reader)?;
-
-    let mut children = Vec::with_capacity(section_index.entries.len());
-    for entry in &section_index.entries[1..] {
-        let name = section_index.get_entry_name(reader, entry)?;
-        let data_start = section_index.get_entry_data_start(entry);
-
-        reader.set_position(data_start as u64);
-
-        let object = Polygon::deserialize(reader)?;
-
-        let key = arena.next_id();
-        let node = IrNode {
-            label: name,
-            key,
-            ty: IrNodeType::Polygon,
-            parent: Some(parent_id),
-            children: ChildrenSlot::Eager(Vec::new()),
-            contents: ContentSlot::Lazy()
-            body: Deferred::evaluated(VirtualNodeBody {
-                children: Vec::new(),
-                inspectable: Some(Box::new(object)),
-            }),
-        };
-
-        arena.insert(key, node);
-        children.push(key);
-    }
-
-    Ok(VirtualNodeBody {
-        children,
-        inspectable: None,
-    })
 }

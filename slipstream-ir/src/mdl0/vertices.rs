@@ -1,13 +1,10 @@
-use std::borrow::Cow;
-
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::{CorruptionError, SlipstreamResult};
 
 use crate::encoding::ReadArrayExt;
-use crate::index::IndexGroup;
-use crate::node::arena::{IrArena, IrNodeDescriptor, IrNodeKey};
-use crate::node::node::{ChildrenSlot, ContentSlot, IrNodeType};
+use crate::node::node::IrNodeType;
+use crate::section::DeserializeSection;
 use crate::util::{VectorDivisor, VertexFormat, deserialize_vector_data};
 use crate::visitor::{Visitable, Visitor};
 
@@ -104,8 +101,22 @@ impl VertexBuffer {
             VertexBufData::Xyz(xyz) => xyz.get(index).copied(),
         }
     }
+}
 
-    pub fn deserialize(reader: &mut RefCursor<[u8]>, header_start: u32) -> SlipstreamResult<Self> {
+impl Visitable for VertexBuffer {
+    fn accept(&self, visitor: &mut dyn Visitor) {
+        visitor.visit_vertices(self);
+    }
+}
+
+impl DeserializeSection for VertexBuffer {
+    const KIND: IrNodeType = IrNodeType::VertexBuffer;
+
+    #[tracing::instrument(skip_all, fields(header_start))]
+    fn deserialize_section(
+        reader: &mut RefCursor<[u8]>,
+        header_start: u64,
+    ) -> SlipstreamResult<Self> {
         let _length = reader.read_u32::<BigEndian>()?;
         let _mdl0_offset = reader.read_i32::<BigEndian>()?;
         let data_offset = reader.read_i32::<BigEndian>()?;
@@ -159,79 +170,4 @@ impl VertexBuffer {
             bounding_volume_max,
         })
     }
-}
-
-impl Visitable for VertexBuffer {
-    fn accept(&self, visitor: &mut dyn Visitor) {
-        visitor.visit_vertices(self);
-    }
-}
-
-pub trait DeserializeSection: Sized {
-    fn ty() -> IrNodeType;
-    fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self>;
-}
-
-/// Deserializes a section (normals, vertices, etc) that has a simple layout.
-///
-/// This means that the entries do not have any subfiles (such as the hierarchical layout of the bones).
-#[tracing::instrument(skip_all)]
-pub fn deserialize_simple_section<T: DeserializeSection>(
-    reader: &mut RefCursor<[u8]>,
-    parent: IrNodeKey,
-    arena: &IrArena,
-) -> SlipstreamResult<()> {
-    let index = IndexGroup::deserialize(reader)?;
-
-    let mut entries = Vec::with_capacity(index.entries.len() - 1);
-    for entry in &index.entries[1..] {
-        let label = index.get_entry_name(reader, entry)?;
-        let data_start = index.get_entry_data_start(entry);
-
-        reader.set_position(data_start);
-
-        let key = arena.insert(IrNodeDescriptor {
-            label,
-            ty: T::ty(),
-            contents: ContentSlot::lazy(reader.clone(), T::ty()),
-            ..Default::default()
-        });
-
-        entries.push(key);
-    }
-
-    todo!()
-}
-
-#[tracing::instrument(skip_all, fields(parent_id))]
-pub fn deserialize_virtual(
-    reader: &mut RefCursor<[u8]>,
-    header_start: u32,
-    parent_id: IrNodeKey,
-    arena: &IrArena,
-) -> SlipstreamResult<VirtualNodeBody> {
-    let section_index = IndexGroup::deserialize(reader)?;
-
-    let mut models = Vec::with_capacity(section_index.entries.len() - 1);
-    for entry in &section_index.entries[1..] {
-        let label = section_index.get_entry_name(reader, entry)?;
-
-        let data_start = section_index.get_entry_data_start(entry);
-        reader.set_position(data_start as u64);
-
-        let model = VertexBuffer::deserialize(reader, header_start)?;
-
-        let key = arena.insert(IrNodeDescriptor {
-            label,
-            ty: IrNodeType::Vertices,
-            contents: ContentSlot::lazy(reader.clone(), IrNodeType::Vertices),
-            ..Default::default()
-        });
-        models.push(key);
-    }
-
-    Ok(VirtualNodeBody {
-        children: models,
-        inspectable: None,
-    })
 }

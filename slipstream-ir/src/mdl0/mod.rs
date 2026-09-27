@@ -1,6 +1,6 @@
 pub mod bones;
-pub mod bytecode;
 pub mod colors;
+pub mod definitions;
 pub mod materials;
 pub mod normals;
 pub mod pal_links;
@@ -332,7 +332,7 @@ pub fn deserialize_virtual(
 
         let node_body = match section_ty {
             SectionType::DrawLists => {
-                bytecode::deserialize_virtual(&mut reader, parent_id, &arena2)
+                definitions::deserialize_virtual(&mut reader, parent_id, &arena2)
             }
             SectionType::Bones => bones::deserialize_skeleton(&mut reader, parent_id, &arena2),
             SectionType::Vertices => vertices::deserialize_virtual(

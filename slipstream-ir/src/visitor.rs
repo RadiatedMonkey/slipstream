@@ -1,6 +1,7 @@
 use crate::mdl0::{
-    bones::Bone, bytecode::Definitions, colors::ColorBuffer, materials::MaterialBuffer,
-    normals::NormalBuffer, polygon::Polygon, uvs::UvBuf, vertices::VertexBuffer,
+    bones::Bone, colors::ColorBuffer, definitions::Definitions, materials::MaterialBuffer,
+    normals::NormalBuffer, pal_links::PaletteLinks, polygon::Polygon, tevs::Tev,
+    tex_links::TextureLinks, uvs::UvBuffer, vertices::VertexBuffer,
 };
 
 #[allow(unused_variables)]
@@ -10,9 +11,12 @@ pub trait Visitor {
     fn visit_vertices(&mut self, vertex_buf: &VertexBuffer) {}
     fn visit_normals(&mut self, normal_buf: &NormalBuffer) {}
     fn visit_colors(&mut self, color_buf: &ColorBuffer) {}
-    fn visit_uvs(&mut self, uv_buf: &UvBuf) {}
+    fn visit_uvs(&mut self, uv_buf: &UvBuffer) {}
     fn visit_polygon(&mut self, polygon: &Polygon) {}
     fn visit_material(&mut self, material: &MaterialBuffer) {}
+    fn visit_tev(&mut self, tev: &Tev) {}
+    fn visit_palette_links(&mut self, links: &PaletteLinks) {}
+    fn visit_texture_links(&mut self, links: &TextureLinks) {}
 }
 
 pub trait Visitable {

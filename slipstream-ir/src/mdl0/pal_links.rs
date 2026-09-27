@@ -2,12 +2,9 @@ use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::{cursor::RefCursor, error::SlipstreamResult};
 
 use crate::{
-    index::IndexGroup,
-    node::{
-        defer::Deferred,
-        node::{IrNodeType, VirtualNode, VirtualNodeBody},
-        refs::{IrArena, IrNodeKey},
-    },
+    node::node::IrNodeType,
+    section::DeserializeSection,
+    visitor::{Visitable, Visitor},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -30,8 +27,20 @@ pub struct PaletteLinks {
     pub links: Vec<PaletteLink>,
 }
 
-impl PaletteLinks {
-    fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
+impl Visitable for PaletteLinks {
+    fn accept(&self, visitor: &mut dyn Visitor) {
+        visitor.visit_palette_links(self);
+    }
+}
+
+impl DeserializeSection for PaletteLinks {
+    const KIND: IrNodeType = IrNodeType::PaletteLinks;
+
+    #[tracing::instrument(skip_all, fields(header_start = _header_start))]
+    fn deserialize_section(
+        reader: &mut RefCursor<[u8]>,
+        _header_start: u64,
+    ) -> SlipstreamResult<Self> {
         let link_count = reader.read_u32::<BigEndian>()?;
 
         let mut links = Vec::with_capacity(link_count as usize);
@@ -41,43 +50,4 @@ impl PaletteLinks {
 
         Ok(Self { links })
     }
-}
-
-#[tracing::instrument(skip_all, fields(parent_id))]
-pub fn deserialize_virtual(
-    reader: &mut RefCursor<[u8]>,
-    parent_id: IrNodeKey,
-    arena: &IrArena,
-) -> SlipstreamResult<VirtualNodeBody> {
-    let section_index = IndexGroup::deserialize(reader)?;
-
-    let mut children = Vec::with_capacity(section_index.entries.len() - 1);
-    for entry in &section_index.entries[1..] {
-        let name = section_index.get_entry_name(reader, entry)?;
-        let data_start = section_index.get_entry_data_start(entry);
-
-        reader.set_position(data_start as u64);
-
-        let links = PaletteLinks::deserialize(reader)?;
-
-        let id = arena.next_id();
-        let node = VirtualNode {
-            label: name,
-            id,
-            parent: Some(parent_id),
-            kind: IrNodeType::PaletteLinks,
-            body: Deferred::evaluated(VirtualNodeBody {
-                children: Vec::new(),
-                inspectable: Some(Box::new(links)),
-            }),
-        };
-
-        arena.insert(id, node);
-        children.push(id);
-    }
-
-    Ok(VirtualNodeBody {
-        children,
-        inspectable: None,
-    })
 }

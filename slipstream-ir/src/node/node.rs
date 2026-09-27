@@ -11,11 +11,6 @@ pub struct DeferredPayload {
     ty: IrNodeType,
 }
 
-pub enum ChildrenSlot {
-    Eager(Vec<IrNodeKey>),
-    Lazy(OnceLock<Vec<IrNodeKey>>, DeferredPayload),
-}
-
 pub enum ContentSlot {
     None,
     Lazy(OnceLock<Box<dyn Visitable + Send + Sync>>, DeferredPayload),
@@ -37,6 +32,8 @@ pub struct IrNode {
     /// refer to each other with IDs instead of names.
     label: String,
     /// The ID of this node. This is what other nodes use to refer to this one.
+    ///
+    /// This key should never be changed for a node and is therefore read-only.
     key: IrNodeKey,
     /// Determines what type this node is. This affects how the node is displayed in the outliner and how
     /// other parts of the editor will treat this node. Setting the incorrect type for a node will likely cause
@@ -46,7 +43,11 @@ pub struct IrNode {
     ///
     /// This will be `None` if the parent is unknown or this node does not have a parent.
     parent: Option<IrNodeKey>,
-    children: ChildrenSlot,
+    /// A list of keys of children of this node.
+    ///
+    /// This value may be lazily evaluated, i.e. it may not be known yet.
+    /// By accessing this value, it will be evaluated.
+    children: Vec<IrNodeKey>,
     contents: ContentSlot,
 }
 
@@ -63,11 +64,8 @@ impl IrNode {
         self.ty
     }
 
-    pub fn children_keys(&self, arena: &IrArena) -> &[IrNodeKey] {
-        match &self.children {
-            ChildrenSlot::Eager(ids) => ids,
-            ChildrenSlot::Lazy(_, _) => todo!(),
-        }
+    pub fn children_keys(&self) -> &[IrNodeKey] {
+        &self.children
     }
 
     pub fn content(&self) -> Option<&(dyn Visitable + Send + Sync)> {
@@ -95,20 +93,20 @@ pub enum IrNodeType {
     /// The root of an MDL0 model. This should contain the section directories `Vertices`, `Normals`.
     Mdl0Root,
     /// The bytecode section of an MDL0 file.
-    Bytecode,
+    Definitions,
     /// The bone section of an MDL0 file.
     Bone {
         /// Whether this is the end bone of a limb. This makes sure it is not displayed as a folder.
         end: bool,
     },
     /// A vertex buffer in an MDL0 file.
-    Vertices,
+    VertexBuffer,
     /// A normal buffer in an MDL0 file.
     Normals,
     /// A color buffer in an MDL0 file.
     Colors,
     Uvs,
-    Materials,
+    Material,
     Tevs,
     Polygon,
     TextureLinks,

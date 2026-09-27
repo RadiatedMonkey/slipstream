@@ -2,10 +2,8 @@ use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::{CorruptionError, SlipstreamResult};
 
-use crate::index::IndexGroup;
-use crate::node::arena::{IrArena, IrNodeKey, VirtualNodeRef};
-use crate::node::defer::Deferred;
-use crate::node::node::{IrNode, IrNodeType, VirtualNodeBody};
+use crate::node::node::IrNodeType;
+use crate::section::DeserializeSection;
 use crate::visitor::{Visitable, Visitor};
 
 /// The opcode IDs for the possible commands in the definitions section of an MDL0 file.
@@ -151,7 +149,7 @@ pub struct Definitions {
 }
 
 impl Definitions {
-    pub fn read_opcode_id(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<DefinitionOpCodeId> {
+    fn read_opcode_id(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<DefinitionOpCodeId> {
         let byte = reader.read_u8()?;
         dbg!(byte);
 
@@ -165,8 +163,19 @@ impl Definitions {
     }
 }
 
-impl Definitions {
-    fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
+impl Visitable for Definitions {
+    fn accept(&self, visitor: &mut dyn Visitor) {
+        visitor.visit_definitions(self)
+    }
+}
+
+impl DeserializeSection for Definitions {
+    const KIND: IrNodeType = IrNodeType::Definitions;
+
+    fn deserialize_section(
+        reader: &mut RefCursor<[u8]>,
+        _header_start: u64,
+    ) -> SlipstreamResult<Self> {
         let mut commands = Vec::new();
 
         let mut opcode = Self::read_opcode_id(reader)?;
@@ -199,50 +208,4 @@ impl Definitions {
 
         Ok(Self { commands })
     }
-}
-
-impl Visitable for Definitions {
-    fn accept(&self, visitor: &mut dyn Visitor) {
-        visitor.visit_definitions(self)
-    }
-}
-
-#[tracing::instrument(skip_all, fields(parent_id))]
-pub fn deserialize_virtual(
-    reader: &mut RefCursor<[u8]>,
-    parent_id: IrNodeKey,
-    arena: &IrArena,
-) -> SlipstreamResult<VirtualNodeBody> {
-    let section_index = IndexGroup::deserialize(reader)?;
-
-    let mut children = Vec::with_capacity(section_index.entries.len() - 1);
-    for entry in &section_index.entries[1..] {
-        let name = section_index.get_entry_name(reader, entry)?;
-        let data_start = section_index.get_entry_data_start(entry);
-
-        reader.set_position(data_start as u64);
-        let draw_list = Definitions::deserialize(reader)?;
-
-        let id = arena.next_id();
-        let node = IrNode {
-            label: name,
-            key,
-            ty: IrNodeType::Bytecode,
-            parent: Some(parent_id),
-            body: Deferred::evaluated(VirtualNodeBody {
-                children: Vec::new(),
-                inspectable: Some(Box::new(draw_list)),
-            }),
-        };
-
-        arena.insert(id, node);
-        children.push(id);
-    }
-
-    dbg!(&children);
-
-    Ok(VirtualNodeBody {
-        children,
-        inspectable: None,
-    })
 }

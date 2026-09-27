@@ -9,7 +9,7 @@ use crate::chr0::Chr0Subfile;
 use crate::encoding::ReadArrayExt;
 use crate::index::IndexGroup;
 use crate::mdl0::{self, MDL0_MAGIC};
-use crate::node::arena::{IrArena, IrNodeKey};
+use crate::node::arena::{IrArena, IrNodeDescriptor, IrNodeKey};
 use crate::node::defer::Deferred;
 use crate::node::node::{IrNode, IrNodeType, VirtualNodeBody};
 

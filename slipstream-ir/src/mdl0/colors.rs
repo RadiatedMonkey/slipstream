@@ -7,12 +7,8 @@ use slipstream_shared::{
 
 use crate::{
     encoding::ReadArrayExt,
-    index::IndexGroup,
-    node::{
-        arena::{IrArena, IrNodeKey},
-        defer::Deferred,
-        node::{IrNodeType, VirtualNode, VirtualNodeBody},
-    },
+    node::node::IrNodeType,
+    section::DeserializeSection,
     visitor::{Visitable, Visitor},
 };
 
@@ -234,12 +230,23 @@ pub fn deserialize_color(
     })
 }
 
-impl ColorBuffer {
-    fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
-        let length = reader.read_u32::<BigEndian>()?;
-        let mdl0_offset = reader.read_i32::<BigEndian>()?;
-        let data_offset = reader.read_i32::<BigEndian>()?;
-        let name_offset = reader.read_i32::<BigEndian>()?;
+impl Visitable for ColorBuffer {
+    fn accept(&self, visitor: &mut dyn Visitor) {
+        visitor.visit_colors(self)
+    }
+}
+
+impl DeserializeSection for ColorBuffer {
+    const KIND: IrNodeType = IrNodeType::Colors;
+
+    fn deserialize_section(
+        reader: &mut RefCursor<[u8]>,
+        _header_start: u64,
+    ) -> SlipstreamResult<Self> {
+        let _length = reader.read_u32::<BigEndian>()?;
+        let _mdl0_offset = reader.read_i32::<BigEndian>()?;
+        let _data_offset = reader.read_i32::<BigEndian>()?;
+        let _name_offset = reader.read_i32::<BigEndian>()?;
         let index = reader.read_u32::<BigEndian>()?;
         let components = ColorComponents::deserialize(reader)?;
         let format = ColorFormat::deserialize(reader)?;
@@ -261,49 +268,4 @@ impl ColorBuffer {
             colors,
         })
     }
-}
-
-impl Visitable for ColorBuffer {
-    fn accept(&self, visitor: &mut dyn Visitor) {
-        visitor.visit_colors(self)
-    }
-}
-
-#[tracing::instrument(skip_all, fields(parent_id))]
-pub fn deserialize_virtual(
-    reader: &mut RefCursor<[u8]>,
-    parent_id: IrNodeKey,
-    arena: &IrArena,
-) -> SlipstreamResult<VirtualNodeBody> {
-    let section_index = IndexGroup::deserialize(reader)?;
-
-    let mut children = Vec::with_capacity(section_index.entries.len() - 1);
-    for entry in &section_index.entries[1..] {
-        let name = section_index.get_entry_name(reader, entry)?;
-        let data_start = section_index.get_entry_data_start(entry);
-
-        reader.set_position(data_start as u64);
-
-        let colors = ColorBuffer::deserialize(reader)?;
-
-        let id = arena.next_id();
-        let node = VirtualNode {
-            label: name,
-            id,
-            kind: IrNodeType::Colors,
-            parent: Some(parent_id),
-            body: Deferred::evaluated(VirtualNodeBody {
-                children: Vec::new(),
-                inspectable: Some(Box::new(colors)),
-            }),
-        };
-
-        arena.insert(id, node);
-        children.push(id);
-    }
-
-    Ok(VirtualNodeBody {
-        children,
-        inspectable: None,
-    })
 }

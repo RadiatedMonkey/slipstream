@@ -3,10 +3,8 @@ use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::{CorruptionError, SlipstreamError, SlipstreamResult};
 
-use crate::index::IndexGroup;
-use crate::node::arena::{IrArena, IrNodeKey};
-use crate::node::defer::Deferred;
-use crate::node::node::{IrNodeType, VirtualNode, VirtualNodeBody};
+use crate::node::node::IrNodeType;
+use crate::section::DeserializeSection;
 use crate::util::{VectorDivisor, VertexFormat, deserialize_vector_data};
 use crate::visitor::{Visitable, Visitor};
 
@@ -131,8 +129,21 @@ impl NormalBuffer {
             NormalBufData::Triple(x) => x.get(index).map(|[x, y, z, ..]| [*x, *y, *z]),
         }
     }
+}
 
-    pub fn deserialize(reader: &mut RefCursor<[u8]>, header_start: u32) -> SlipstreamResult<Self> {
+impl Visitable for NormalBuffer {
+    fn accept(&self, visitor: &mut dyn Visitor) {
+        visitor.visit_normals(self)
+    }
+}
+
+impl DeserializeSection for NormalBuffer {
+    const KIND: IrNodeType = IrNodeType::Normals;
+
+    fn deserialize_section(
+        reader: &mut RefCursor<[u8]>,
+        header_start: u64,
+    ) -> SlipstreamResult<Self> {
         let _length = reader.read_u32::<BigEndian>()?;
         let _mdl0_offset = reader.read_i32::<BigEndian>()?;
         let data_offset = reader.read_i32::<BigEndian>()?;
@@ -184,50 +195,4 @@ impl NormalBuffer {
             normals,
         })
     }
-}
-
-impl Visitable for NormalBuffer {
-    fn accept(&self, visitor: &mut dyn Visitor) {
-        visitor.visit_normals(self)
-    }
-}
-
-/// Deserializes all buffers in the `Normals` section of an MDL0 file.
-#[tracing::instrument(skip_all, fields(parent_id))]
-pub fn deserialize_normals_section(
-    reader: &mut RefCursor<[u8]>,
-    header_start: u32,
-    parent_id: IrNodeKey,
-    arena: &IrArena,
-) -> SlipstreamResult<VirtualNodeBody> {
-    let section_index = IndexGroup::deserialize(reader)?;
-
-    let mut models = Vec::with_capacity(section_index.entries.len() - 1);
-    for entry in &section_index.entries[1..] {
-        let name = section_index.get_entry_name(reader, entry)?;
-        let data_start = section_index.get_entry_data_start(entry);
-
-        reader.set_position(data_start as u64);
-
-        let normals = NormalBuffer::deserialize(reader, header_start)?;
-
-        let id = arena.next_id();
-        let node = VirtualNode {
-            label: name,
-            id,
-            kind: IrNodeType::Normals,
-            parent: Some(parent_id),
-            body: Deferred::evaluated(VirtualNodeBody {
-                children: Vec::new(),
-                inspectable: Some(Box::new(normals)),
-            }),
-        };
-        arena.insert(id, node);
-        models.push(id);
-    }
-
-    Ok(VirtualNodeBody {
-        children: models,
-        inspectable: None,
-    })
 }

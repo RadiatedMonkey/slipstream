@@ -1,11 +1,11 @@
-use crate::node::node::{ChildrenSlot, ContentSlot, IrNode, IrNodeType};
+use crate::node::node::{ContentSlot, IrNode, IrNodeType};
 
 slotmap::new_key_type! { pub struct IrNodeKey; }
 
 pub struct IrNodeDescriptor {
     pub label: String,
     pub ty: IrNodeType,
-    pub children: ChildrenSlot,
+    pub children: Vec<IrNodeKey>,
     pub contents: ContentSlot,
 }
 
@@ -14,7 +14,7 @@ impl Default for IrNodeDescriptor {
         Self {
             label: String::from("<null>"),
             ty: IrNodeType::Unknown,
-            children: ChildrenSlot::Eager(Vec::new()),
+            children: Vec::new(),
             contents: ContentSlot::None,
         }
     }
