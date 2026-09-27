@@ -9,10 +9,11 @@ use crate::{
     encoding::ReadArrayExt,
     index::IndexGroup,
     node::{
+        arena::{IrArena, IrNodeKey},
         defer::Deferred,
-        node::{VirtualNode, VirtualNodeBody, VirtualNodeKind},
-        refs::{VirtualNodeId, VirtualNodeMap},
+        node::{IrNodeType, VirtualNode, VirtualNodeBody},
     },
+    visitor::{Visitable, Visitor},
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -145,7 +146,7 @@ impl ColorFormat {
 ///
 /// This data cannot be used on its own. It is indexed into by the indices in the shape draw commands.
 #[derive(Debug, Clone)]
-pub struct ColorBuf {
+pub struct ColorBuffer {
     index: u32,
     components: ColorComponents,
     format: ColorFormat,
@@ -233,7 +234,7 @@ pub fn deserialize_color(
     })
 }
 
-impl ColorBuf {
+impl ColorBuffer {
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let length = reader.read_u32::<BigEndian>()?;
         let mdl0_offset = reader.read_i32::<BigEndian>()?;
@@ -262,11 +263,17 @@ impl ColorBuf {
     }
 }
 
+impl Visitable for ColorBuffer {
+    fn accept(&self, visitor: &mut dyn Visitor) {
+        visitor.visit_colors(self)
+    }
+}
+
 #[tracing::instrument(skip_all, fields(parent_id))]
 pub fn deserialize_virtual(
     reader: &mut RefCursor<[u8]>,
-    parent_id: VirtualNodeId,
-    node_map: &VirtualNodeMap,
+    parent_id: IrNodeKey,
+    arena: &IrArena,
 ) -> SlipstreamResult<VirtualNodeBody> {
     let section_index = IndexGroup::deserialize(reader)?;
 
@@ -277,13 +284,13 @@ pub fn deserialize_virtual(
 
         reader.set_position(data_start as u64);
 
-        let colors = ColorBuf::deserialize(reader)?;
+        let colors = ColorBuffer::deserialize(reader)?;
 
-        let id = node_map.next_id();
+        let id = arena.next_id();
         let node = VirtualNode {
             label: name,
             id,
-            kind: VirtualNodeKind::Colors,
+            kind: IrNodeType::Colors,
             parent: Some(parent_id),
             body: Deferred::evaluated(VirtualNodeBody {
                 children: Vec::new(),
@@ -291,7 +298,7 @@ pub fn deserialize_virtual(
             }),
         };
 
-        node_map.insert(id, node);
+        arena.insert(id, node);
         children.push(id);
     }
 

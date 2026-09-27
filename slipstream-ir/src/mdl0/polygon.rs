@@ -5,18 +5,13 @@ use slipstream_shared::{
 };
 
 use crate::{
-    encoding::ReadArrayExt,
-    gx::{
+    encoding::ReadArrayExt, gx::{
         GxBytecode, GxOpCode,
         load_cp::{CpVatA, CpVatB, CpVatC, CpVcdHi, CpVcdLo, LoadCpOpCode},
         load_xf::{LoadXfOpCode, LoadXfPayload},
-    },
-    index::IndexGroup,
-    node::{
-        defer::Deferred,
-        node::{VirtualNode, VirtualNodeBody, VirtualNodeKind},
-        refs::{VirtualNodeId, VirtualNodeMap},
-    },
+    }, index::IndexGroup, node::{
+        arena::{IrArena, IrNodeKey}, defer::Deferred, node::{ChildrenSlot, ContentSlot, IrNode, IrNodeType, VirtualNodeBody},
+    }, visitor::{Visitable, Visitor},
 };
 
 /// Maps shape local matrix IDs to global ones.
@@ -45,13 +40,13 @@ impl BoneTable {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum ShapeModifier {
+pub enum PolygonModifier {
     None,
     ChangeCurrentMatrix,
     Invisible,
 }
 
-impl TryFrom<u32> for ShapeModifier {
+impl TryFrom<u32> for PolygonModifier {
     type Error = SlipstreamError;
 
     fn try_from(value: u32) -> Result<Self, Self::Error> {
@@ -70,7 +65,7 @@ impl TryFrom<u32> for ShapeModifier {
     }
 }
 
-impl ShapeModifier {
+impl PolygonModifier {
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let word = reader.read_u32::<BigEndian>()?;
         Self::try_from(word)
@@ -175,9 +170,9 @@ impl TryFrom<GxBytecode> for GxVertexDeclaration {
 ///
 /// It contains the actual draw commands for the Broadway GPU to execute.
 #[derive(Debug, Clone)]
-pub struct Shape {
+pub struct Polygon {
     pub array_flags: u32,
-    pub modifier: ShapeModifier,
+    pub modifier: PolygonModifier,
     /// This shape's index in the `Shapes` section.
     pub index: u32,
     /// The amount of vertices in this polygon.
@@ -209,8 +204,8 @@ pub struct Shape {
     pub vertex_data_gx: GxBytecode,
 }
 
-impl Shape {
-    fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
+impl Polygon {
+    pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let object_start = reader.position();
         let length = reader.read_u32::<BigEndian>()?;
         let mdl0_offset = reader.read_i32::<BigEndian>()?;
@@ -230,7 +225,7 @@ impl Shape {
         let vertex_data_size = reader.read_u32::<BigEndian>()?;
         let vertex_data_offset = reader.read_i32::<BigEndian>()?;
         let array_flags = reader.read_u32::<BigEndian>()?;
-        let modifier = ShapeModifier::deserialize(reader)?;
+        let modifier = PolygonModifier::deserialize(reader)?;
         let _name_offset = reader.read_u32::<BigEndian>()?;
         let index = reader.read_u32::<BigEndian>()?;
         let vertex_count = reader.read_u32::<BigEndian>()?;
@@ -297,12 +292,18 @@ impl Shape {
     }
 }
 
+impl Visitable for Polygon {
+    fn accept(&self, visitor: &mut dyn Visitor) {
+        visitor.visit_polygon(self)
+    }
+}
+
 #[tracing::instrument(skip_all, fields(parent_id))]
 pub fn deserialize_virtual(
     reader: &mut RefCursor<[u8]>,
     header_start: u32,
-    parent_id: VirtualNodeId,
-    node_map: &VirtualNodeMap,
+    parent_id: IrNodeKey,
+    arena: &IrArena,
 ) -> SlipstreamResult<VirtualNodeBody> {
     let section_index = IndexGroup::deserialize(reader)?;
 
@@ -313,22 +314,24 @@ pub fn deserialize_virtual(
 
         reader.set_position(data_start as u64);
 
-        let object = Shape::deserialize(reader)?;
+        let object = Polygon::deserialize(reader)?;
 
-        let id = node_map.next_id();
-        let node = VirtualNode {
+        let key = arena.next_id();
+        let node = IrNode {
             label: name,
-            id,
-            kind: VirtualNodeKind::Shape,
+            key,
+            ty: IrNodeType::Polygon,
             parent: Some(parent_id),
+            children: ChildrenSlot::Eager(Vec::new()),
+            contents: ContentSlot::Lazy()
             body: Deferred::evaluated(VirtualNodeBody {
                 children: Vec::new(),
                 inspectable: Some(Box::new(object)),
             }),
         };
 
-        node_map.insert(id, node);
-        children.push(id);
+        arena.insert(key, node);
+        children.push(key);
     }
 
     Ok(VirtualNodeBody {

@@ -5,7 +5,7 @@ pub mod widgets;
 use std::sync::mpsc;
 
 use crate::{
-    node::refs::{VirtualNodeId, VirtualNodeMap},
+    node::arena::{IrArena, IrNodeKey},
     panes::{ContentSignature, Pane, PaneAction},
     reg_icon,
 };
@@ -14,22 +14,22 @@ pub struct InspectorPane {
     cmd_sender: mpsc::Sender<PaneAction>,
     content_sig: ContentSignature,
 
-    node_map: VirtualNodeMap,
-    node: VirtualNodeId,
+    arena: IrArena,
+    node: IrNodeKey,
 }
 
 impl InspectorPane {
     pub fn new(
         cmd_sender: mpsc::Sender<PaneAction>,
         content_sig: ContentSignature,
-        node: VirtualNodeId,
-        node_map: VirtualNodeMap,
+        node: IrNodeKey,
+        arena: IrArena,
     ) -> Box<dyn Pane> {
         Box::new(Self {
             cmd_sender,
             content_sig,
             node,
-            node_map,
+            arena,
         })
     }
 }
@@ -46,7 +46,7 @@ impl Pane for InspectorPane {
     fn draw(&mut self, ui: &mut egui::Ui, tile_id: egui_tiles::TileId) -> egui_tiles::UiResponse {
         let drag_started = ui.heading("Inspector").drag_started();
 
-        let open_node = self.node_map.get(self.node).unwrap();
+        let open_node = self.arena.get(self.node).unwrap();
 
         let mut node_ref = open_node.write();
         egui::ScrollArea::vertical().show(ui, |ui| {

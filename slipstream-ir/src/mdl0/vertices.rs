@@ -6,10 +6,10 @@ use slipstream_shared::error::{CorruptionError, SlipstreamResult};
 
 use crate::encoding::ReadArrayExt;
 use crate::index::IndexGroup;
-use crate::node::defer::Deferred;
-use crate::node::node::{VirtualNode, VirtualNodeBody, VirtualNodeKind};
-use crate::node::refs::{VirtualNodeId, VirtualNodeMap};
+use crate::node::arena::{IrArena, IrNodeDescriptor, IrNodeKey};
+use crate::node::node::{ChildrenSlot, ContentSlot, IrNodeType};
 use crate::util::{VectorDivisor, VertexFormat, deserialize_vector_data};
+use crate::visitor::{Visitable, Visitor};
 
 const COMPONENTS_XY: u32 = 0x0;
 const COMPONENTS_XYZ: u32 = 0x1;
@@ -71,7 +71,7 @@ impl VertexBufData {
 ///
 /// [`Shape`]: crate::format::mdl0::shapes::Shape
 #[derive(Debug, Clone, PartialEq)]
-pub struct VertexBuf {
+pub struct VertexBuffer {
     /// The index into the `Vertices` section of this buffer.
     pub index: u32,
     /// The format of the vertices in this buffer.
@@ -95,7 +95,7 @@ pub struct VertexBuf {
     pub vertices: VertexBufData,
 }
 
-impl VertexBuf {
+impl VertexBuffer {
     /// Convenience method that loads the vertex at the given index and upcasts it to an XYZ vertex.
     /// For vertices with only two components, the Z component is set 0.
     pub fn get_xyz(&self, index: usize) -> Option<[f32; 3]> {
@@ -161,38 +161,73 @@ impl VertexBuf {
     }
 }
 
+impl Visitable for VertexBuffer {
+    fn accept(&self, visitor: &mut dyn Visitor) {
+        visitor.visit_vertices(self);
+    }
+}
+
+pub trait DeserializeSection: Sized {
+    fn ty() -> IrNodeType;
+    fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self>;
+}
+
+/// Deserializes a section (normals, vertices, etc) that has a simple layout.
+///
+/// This means that the entries do not have any subfiles (such as the hierarchical layout of the bones).
+#[tracing::instrument(skip_all)]
+pub fn deserialize_simple_section<T: DeserializeSection>(
+    reader: &mut RefCursor<[u8]>,
+    parent: IrNodeKey,
+    arena: &IrArena,
+) -> SlipstreamResult<()> {
+    let index = IndexGroup::deserialize(reader)?;
+
+    let mut entries = Vec::with_capacity(index.entries.len() - 1);
+    for entry in &index.entries[1..] {
+        let label = index.get_entry_name(reader, entry)?;
+        let data_start = index.get_entry_data_start(entry);
+
+        reader.set_position(data_start);
+
+        let key = arena.insert(IrNodeDescriptor {
+            label,
+            ty: T::ty(),
+            contents: ContentSlot::lazy(reader.clone(), T::ty()),
+            ..Default::default()
+        });
+
+        entries.push(key);
+    }
+
+    todo!()
+}
+
 #[tracing::instrument(skip_all, fields(parent_id))]
 pub fn deserialize_virtual(
     reader: &mut RefCursor<[u8]>,
     header_start: u32,
-    parent_id: VirtualNodeId,
-    node_map: &VirtualNodeMap,
+    parent_id: IrNodeKey,
+    arena: &IrArena,
 ) -> SlipstreamResult<VirtualNodeBody> {
     let section_index = IndexGroup::deserialize(reader)?;
 
     let mut models = Vec::with_capacity(section_index.entries.len() - 1);
     for entry in &section_index.entries[1..] {
-        let name = section_index.get_entry_name(reader, entry)?;
+        let label = section_index.get_entry_name(reader, entry)?;
 
         let data_start = section_index.get_entry_data_start(entry);
         reader.set_position(data_start as u64);
 
-        let model = VertexBuf::deserialize(reader, header_start)?;
+        let model = VertexBuffer::deserialize(reader, header_start)?;
 
-        let id = node_map.next_id();
-        let node = VirtualNode {
-            label: name,
-            id,
-            kind: VirtualNodeKind::Vertices,
-            parent: Some(parent_id),
-            body: Deferred::evaluated(VirtualNodeBody {
-                children: Vec::new(),
-                inspectable: Some(Box::new(model)),
-            }),
-        };
-
-        node_map.insert(id, node);
-        models.push(id);
+        let key = arena.insert(IrNodeDescriptor {
+            label,
+            ty: IrNodeType::Vertices,
+            contents: ContentSlot::lazy(reader.clone(), IrNodeType::Vertices),
+            ..Default::default()
+        });
+        models.push(key);
     }
 
     Ok(VirtualNodeBody {

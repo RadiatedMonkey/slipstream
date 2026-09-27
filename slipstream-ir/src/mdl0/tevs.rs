@@ -1,9 +1,9 @@
 use crate::encoding::ReadArrayExt;
 use crate::gx::GxBytecode;
 use crate::index::IndexGroup;
+use crate::node::arena::{IrArena, IrNodeKey};
 use crate::node::defer::Deferred;
-use crate::node::node::{VirtualNode, VirtualNodeBody, VirtualNodeKind};
-use crate::node::refs::{VirtualNodeId, VirtualNodeMap};
+use crate::node::node::{IrNodeType, VirtualNode, VirtualNodeBody};
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::SlipstreamResult;
@@ -39,8 +39,8 @@ impl Tev {
 #[tracing::instrument(skip_all, fields(parent_id))]
 pub fn deserialize_virtual(
     reader: &mut RefCursor<[u8]>,
-    parent_id: VirtualNodeId,
-    node_map: &VirtualNodeMap,
+    parent_id: IrNodeKey,
+    arena: &IrArena,
 ) -> SlipstreamResult<VirtualNodeBody> {
     let section_index = IndexGroup::deserialize(reader)?;
 
@@ -52,19 +52,19 @@ pub fn deserialize_virtual(
         reader.set_position(data_start as u64);
 
         let tev = Tev::deserialize(reader)?;
-        let id = node_map.next_id();
+        let id = arena.next_id();
         let node = VirtualNode {
             label: name,
             id,
             parent: Some(parent_id),
-            kind: VirtualNodeKind::Tevs,
+            kind: IrNodeType::Tevs,
             body: Deferred::evaluated(VirtualNodeBody {
                 children: Vec::new(),
                 inspectable: Some(Box::new(tev)),
             }),
         };
 
-        node_map.insert(id, node);
+        arena.insert(id, node);
         tevs.push(id);
     }
 

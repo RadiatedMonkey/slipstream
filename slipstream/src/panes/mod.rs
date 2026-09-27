@@ -3,7 +3,7 @@ use std::{
     sync::mpsc,
 };
 
-use crate::node::refs::VirtualNodeId;
+use crate::node::arena::IrNodeKey;
 
 pub mod inspector;
 pub mod log;
@@ -50,13 +50,13 @@ pub enum RequestNewPane {
     ///
     /// [`Outliner`]: outliner::OutlinerPane.
     Outliner {
-        root: VirtualNodeId,
+        root: IrNodeKey,
     },
     Inspector {
-        inspected: VirtualNodeId,
+        inspected: IrNodeKey,
     },
     Viewer {
-        viewed: Option<VirtualNodeId>,
+        viewed: Option<IrNodeKey>,
     },
     Log,
 }
@@ -93,7 +93,7 @@ impl RequestNewPane {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequestPaneEdit {
     pub tile_id: egui_tiles::TileId,
-    pub new_node: VirtualNodeId,
+    pub new_node: IrNodeKey,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -10,27 +10,24 @@ use std::{
 ///
 /// [`Cursor`]: std::io::Cursor
 #[derive(Debug, Default, PartialEq, Eq)]
-pub struct RefCursor<T>
-where
-    T: AsRef<[u8]> + ?Sized,
-{
+pub struct RefCursor<T: ?Sized> {
     inner: Arc<T>,
     /// The current position of the cursor.
     pos: u64,
     lower_bound: u64,
 }
 
-/// This is a nearly exact copy of the standard library.
-impl<T> RefCursor<T>
-where
-    T: AsRef<[u8]> + ?Sized,
-{
+impl<T: ?Sized> RefCursor<T> {
     pub fn new(inner: Arc<T>) -> Self {
         Self {
             inner,
             pos: 0,
             lower_bound: 0,
         }
+    }
+
+    pub fn into_inner(self) -> Arc<T> {
+        self.inner
     }
 
     /// Returns a cursor that only reads the remaining bytes.
@@ -62,13 +59,15 @@ where
     pub fn set_position(&mut self, pos: u64) {
         self.pos = pos;
     }
+}
 
+impl<T: AsRef<[u8]> + ?Sized> RefCursor<T> {
     /// Returns a reference to the bytes remaining in this buffer.
     ///
     /// I.e this buffer will be the bytes in the range `pos...range.end`.
     ///
     /// If the cursor is past the end of the buffer, the remaining buffer will be empty.
-    pub fn as_remaining(&self) -> &[u8] {
+    pub fn remaining(&self) -> &[u8] {
         &self.inner.as_ref().as_ref()[(self.pos + self.lower_bound) as usize..]
     }
 
@@ -79,19 +78,16 @@ where
 
     /// The length of the remaining buffer.
     pub fn remaining_len(&self) -> usize {
-        self.as_remaining().len()
+        self.remaining().len()
     }
 
-    /// Dumps all contents to the given file as binary.
+    /// Dumps all contents to the given file in binary format.
     pub fn dump<P: AsRef<std::path::Path>>(&self, path: P) -> io::Result<()> {
         std::fs::write(path.as_ref(), self.inner.as_ref())
     }
 }
 
-impl<T> Clone for RefCursor<T>
-where
-    T: AsRef<[u8]> + ?Sized,
-{
+impl<T> Clone for RefCursor<T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -107,7 +103,7 @@ where
     T: AsRef<[u8]> + ?Sized,
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let rem = self.as_remaining();
+        let rem = self.remaining();
         let n = std::cmp::min(buf.len(), rem.len());
 
         buf[..n].copy_from_slice(&rem[..n]);
@@ -130,7 +126,7 @@ where
     }
 
     fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
-        let rem = self.as_remaining();
+        let rem = self.remaining();
         let n = buf.len();
 
         if rem.len() < n {
@@ -146,7 +142,7 @@ where
     }
 
     fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
-        let rem = self.as_remaining();
+        let rem = self.remaining();
         let n = rem.len();
 
         buf.reserve(n);
@@ -158,7 +154,7 @@ where
     }
 
     fn read_to_string(&mut self, buf: &mut String) -> io::Result<usize> {
-        let rem = self.as_remaining();
+        let rem = self.remaining();
         let n = rem.len();
 
         let content = str::from_utf8(rem)

@@ -1,4 +1,4 @@
-use crate::node::refs::VirtualNodeId;
+use crate::node::arena::IrNodeKey;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum DraggableNodeKind {
@@ -8,35 +8,34 @@ pub enum DraggableNodeKind {
 
 #[derive(Debug)]
 pub struct DraggableNodePayload {
-    pub id: VirtualNodeId,
+    pub id: IrNodeKey,
     pub kind: DraggableNodeKind,
 }
 
-pub fn draw_node_reference(id: egui::Id, node: Option<VirtualNodeId>, ui: &mut egui::Ui) {
+pub fn draw_node_reference(id: egui::Id, node: Option<IrNodeKey>, ui: &mut egui::Ui) {
     let frame = egui::Frame::default().inner_margin(4.0);
 
-    let (_response, payload) =
-        ui.dnd_drop_zone::<VirtualNodeId, Option<VirtualNodeId>>(frame, |ui| {
-            if let Some(node) = node {
-                let response = ui
-                    .dnd_drag_source(id, node, |ui| {
-                        ui.label(format!("label {node:?}"));
-                    })
-                    .response;
+    let (_response, payload) = ui.dnd_drop_zone::<IrNodeKey, Option<IrNodeKey>>(frame, |ui| {
+        if let Some(node) = node {
+            let response = ui
+                .dnd_drag_source(id, node, |ui| {
+                    ui.label(format!("label {node:?}"));
+                })
+                .response;
 
-                if let Some(hovered) = response.dnd_hover_payload::<VirtualNodeId>() {
-                    tracing::trace!("Hovering {:?}", *hovered);
-                }
-
-                if let Some(payload) = response.dnd_release_payload::<VirtualNodeId>() {
-                    tracing::trace!("Dropped {:?}", *payload);
-                }
-            } else {
-                ui.label("None");
+            if let Some(hovered) = response.dnd_hover_payload::<IrNodeKey>() {
+                tracing::trace!("Hovering {:?}", *hovered);
             }
 
-            None
-        });
+            if let Some(payload) = response.dnd_release_payload::<IrNodeKey>() {
+                tracing::trace!("Dropped {:?}", *payload);
+            }
+        } else {
+            ui.label("None");
+        }
+
+        None
+    });
 
     if let Some(payload) = payload {
         tracing::trace!("Dropped outer: {}", *payload);

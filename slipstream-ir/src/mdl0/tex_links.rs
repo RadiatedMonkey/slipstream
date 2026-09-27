@@ -5,8 +5,8 @@ use crate::{
     index::IndexGroup,
     node::{
         defer::Deferred,
-        node::{VirtualNode, VirtualNodeBody, VirtualNodeKind},
-        refs::{VirtualNodeId, VirtualNodeMap},
+        node::{IrNodeType, VirtualNode, VirtualNodeBody},
+        refs::{IrArena, IrNodeKey},
     },
 };
 
@@ -46,8 +46,8 @@ impl TextureLinks {
 #[tracing::instrument(skip_all, fields(parent_id))]
 pub fn deserialize_virtual(
     reader: &mut RefCursor<[u8]>,
-    parent_id: VirtualNodeId,
-    node_map: &VirtualNodeMap,
+    parent_id: IrNodeKey,
+    arena: &IrArena,
 ) -> SlipstreamResult<VirtualNodeBody> {
     let section_index = IndexGroup::deserialize(reader)?;
 
@@ -60,19 +60,19 @@ pub fn deserialize_virtual(
 
         let links = TextureLinks::deserialize(reader)?;
 
-        let id = node_map.next_id();
+        let id = arena.next_id();
         let node = VirtualNode {
             label: name,
             id,
             parent: Some(parent_id),
-            kind: VirtualNodeKind::TextureLinks,
+            kind: IrNodeType::TextureLinks,
             body: Deferred::evaluated(VirtualNodeBody {
                 children: Vec::new(),
                 inspectable: Some(Box::new(links)),
             }),
         };
 
-        node_map.insert(id, node);
+        arena.insert(id, node);
         children.push(id);
     }
 

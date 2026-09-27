@@ -7,8 +7,8 @@ use crate::{
     error::{InvalidInputError, SlipstreamError, SlipstreamResult},
     node::{
         defer::Deferred,
-        node::VirtualNodeKind,
-        refs::{VirtualNodeId, VirtualNodeMap},
+        node::IrNodeType,
+        refs::{IrArena, IrNodeKey},
     },
     panes::{ContentSignature, Pane, PaneAction, RequestNewPane, inspector::InspectorPane},
 };
@@ -25,22 +25,22 @@ pub struct OutlinerPane {
     ///
     /// The signature only contains the type of window and the root node ID.
     content_sig: ContentSignature,
-    root: VirtualNodeId,
-    node_map: VirtualNodeMap,
+    root: IrNodeKey,
+    arena: IrArena,
 }
 
 impl OutlinerPane {
     pub fn new(
         cmd_sender: mpsc::Sender<PaneAction>,
         content_sig: ContentSignature,
-        root: VirtualNodeId,
-        node_map: VirtualNodeMap,
+        root: IrNodeKey,
+        arena: IrArena,
     ) -> Box<dyn Pane> {
         Box::new(Self {
             cmd_sender,
             content_sig,
             root,
-            node_map,
+            arena,
         })
     }
 
@@ -49,13 +49,9 @@ impl OutlinerPane {
     /// Lazy nodes are automatically evaluated once their folder is opened.
     ///
     /// If a specific node has been opened, this function returns the ID of its cache entry.
-    fn draw_file_tree(
-        &mut self,
-        root_node: VirtualNodeId,
-        ui: &mut egui::Ui,
-    ) -> SlipstreamResult<()> {
+    fn draw_file_tree(&mut self, root_node: IrNodeKey, ui: &mut egui::Ui) -> SlipstreamResult<()> {
         let curr_node_lock = self
-            .node_map
+            .arena
             .get(root_node)
             .ok_or_else(|| {
                 SlipstreamError::from(InvalidInputError {
@@ -218,7 +214,7 @@ impl Pane for OutlinerPane {
 fn draw_outliner_node_icon(
     ui: &mut egui::Ui,
     openness: f32,
-    node_kind: VirtualNodeKind,
+    node_kind: IrNodeType,
     response: &egui::Response,
 ) {
     let icon = if openness < 0.5 {

@@ -23,8 +23,8 @@ use crate::{
         vertices::{VertexBuf, VertexPositionType},
     },
     node::{
-        node::{Inspectable, InspectableReadGuard, VirtualNodeBody, VirtualNodeKind},
-        refs::{VirtualNodeId, VirtualNodeMap},
+        node::{Inspectable, InspectableReadGuard, IrNodeType, VirtualNodeBody},
+        refs::{IrArena, IrNodeKey},
     },
 };
 
@@ -314,20 +314,20 @@ impl PolygonScratch {
 
 #[derive(Clone)]
 pub struct ModelScratch {
-    pub map: VirtualNodeMap,
+    pub map: IrArena,
 
-    pub positions: Vec<VirtualNodeId>,
-    pub normals: Vec<VirtualNodeId>,
-    pub colors: Vec<VirtualNodeId>,
-    pub uvs: Vec<VirtualNodeId>,
-    pub shapes: Vec<VirtualNodeId>,
+    pub positions: Vec<IrNodeKey>,
+    pub normals: Vec<IrNodeKey>,
+    pub colors: Vec<IrNodeKey>,
+    pub uvs: Vec<IrNodeKey>,
+    pub shapes: Vec<IrNodeKey>,
 }
 
 const POSITION_DEFAULT: [f32; 3] = [0.0; 3];
 const NORMAL_DEFAULT: [f32; 3] = [0.0, 1.0, 0.0];
 
 impl ModelScratch {
-    pub fn new(map: VirtualNodeMap) -> Self {
+    pub fn new(map: IrArena) -> Self {
         Self {
             map,
             positions: Vec::new(),
@@ -565,7 +565,7 @@ impl ModelScratch {
     }
 
     #[tracing::instrument(skip_all, fields(node))]
-    pub fn from_root(node: VirtualNodeId, map: VirtualNodeMap) -> SlipstreamResult<Self> {
+    pub fn from_root(node: IrNodeKey, map: IrArena) -> SlipstreamResult<Self> {
         tracing::trace!("Constructing model buffer block from MDL0 file");
 
         let mut bufs = Self::new(map.clone());
@@ -587,11 +587,11 @@ impl ModelScratch {
                 let guard = handle.read();
 
                 match guard.kind {
-                    VirtualNodeKind::Vertices => bufs.positions.push(child),
-                    VirtualNodeKind::Normals => bufs.normals.push(child),
-                    VirtualNodeKind::Colors => bufs.colors.push(child),
-                    VirtualNodeKind::Uvs => bufs.uvs.push(child),
-                    VirtualNodeKind::Shape => bufs.shapes.push(child),
+                    IrNodeType::Vertices => bufs.positions.push(child),
+                    IrNodeType::Normals => bufs.normals.push(child),
+                    IrNodeType::Colors => bufs.colors.push(child),
+                    IrNodeType::Uvs => bufs.uvs.push(child),
+                    IrNodeType::Shape => bufs.shapes.push(child),
                     _ => {}
                 }
             }

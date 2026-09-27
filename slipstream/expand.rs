@@ -801,7 +801,7 @@ pub mod editor {
         use crate::cmd::AppCommandChannel;
         use crate::decorations::{self, WindowState};
         use crate::error::{SlipstreamError, SlipstreamResult, InvalidInputError};
-        use crate::node::refs::{VirtualNodeId, VirtualNodeMap, VirtualRefCacheMap};
+        use crate::node::arena::{IrNodeKey, IrArena, VirtualRefCacheMap};
         use crate::node::root::{self};
         use crate::pages::RoutablePage;
         use crate::pages::intro::IntroPage;
@@ -816,7 +816,7 @@ pub mod editor {
         use crate::shared::util::RefCursor;
         pub struct Properties {
             pub label: String,
-            pub node_id: VirtualNodeId,
+            pub node_id: IrNodeKey,
         }
         pub enum OpenedFileInfo {
             Native { path: PathBuf, file_name: String, content: Vec<u8> },
@@ -956,8 +956,8 @@ pub mod editor {
             /// Not an internal URI.
             pub file_info: OpenedFileInfo,
             /// The root node of the file.
-            pub file_base_node: VirtualNodeId,
-            pub node_map: VirtualNodeMap,
+            pub file_base_node: IrNodeKey,
+            pub arena: IrArena,
             pub pane_behavior: PaneBehavior,
             pub pane_tree: egui_tiles::Tree<Box<dyn Pane>>,
         }
@@ -969,10 +969,10 @@ pub mod editor {
             ) -> SlipstreamResult<Box<dyn RoutablePage>> {
                 let contents = file_info.content();
                 let cursor = RefCursor::new(Arc::<[u8]>::from(contents));
-                let node_map = Arc::new(VirtualRefCacheMap::new());
+                let arena = Arc::new(VirtualRefCacheMap::new());
                 let root_node = root::deserialize_maybe_compressed(
                     cursor,
-                    &node_map,
+                    &arena,
                     file_info.file_name().to_owned(),
                 )?;
                 let mut tiles = egui_tiles::Tiles::default();
@@ -990,7 +990,7 @@ pub mod editor {
                     tx.clone(),
                     outliner_sig,
                     root_node,
-                    Arc::clone(&node_map),
+                    Arc::clone(&arena),
                 );
                 let viewer_sig = RequestNewPane::Viewer {
                     viewed: None,
@@ -1000,7 +1000,7 @@ pub mod editor {
                     tx.clone(),
                     viewer_sig,
                     None,
-                    Arc::clone(&node_map),
+                    Arc::clone(&arena),
                     render_state.clone(),
                 );
                 let panes = [outliner, viewer?]
@@ -1027,7 +1027,7 @@ pub mod editor {
                     Box::new(Self {
                         cmd: cmd_channel,
                         render_state: render_state.clone(),
-                        node_map,
+                        arena,
                         file_info,
                         file_base_node: root_node,
                         pane_behavior,
@@ -1078,7 +1078,7 @@ pub mod editor {
                             self.pane_behavior.sender.clone(),
                             content_sig,
                             root,
-                            self.node_map.clone(),
+                            self.arena.clone(),
                         )
                     }
                     RequestNewPane::Inspector { inspected } => {
@@ -1086,7 +1086,7 @@ pub mod editor {
                             self.pane_behavior.sender.clone(),
                             content_sig,
                             inspected,
-                            self.node_map.clone(),
+                            self.arena.clone(),
                         )
                     }
                     RequestNewPane::Viewer { viewed } => {
@@ -1094,7 +1094,7 @@ pub mod editor {
                             self.pane_behavior.sender.clone(),
                             content_sig,
                             viewed,
-                            self.node_map.clone(),
+                            self.arena.clone(),
                             self.render_state.clone(),
                         )?
                     }
@@ -1474,7 +1474,7 @@ pub mod editor {
                 bytecode::{Bytecode, BytecodeCommand},
                 polygons::Polygon, vertices::VertexBuf,
             },
-            node::refs::{VirtualNodeId, VirtualNodeMap},
+            node::arena::{IrNodeKey, IrArena},
         };
     }
     pub use editor::*;
@@ -1484,8 +1484,8 @@ pub mod format {
         use byteorder::{BigEndian, ReadBytesExt};
         use crate::error::{CorruptionError, SlipstreamError, SlipstreamResult, IncorrectFormat};
         use crate::node::defer::Deferred;
-        use crate::node::node::{VirtualNode, VirtualNodeBody, VirtualNodeKind};
-        use crate::node::refs::{VirtualNodeId, VirtualNodeMap};
+        use crate::node::node::{VirtualNode, VirtualNodeBody, IrNodeType};
+        use crate::node::arena::{IrNodeKey, IrArena};
         use crate::panes::inspector::raw::Raw;
         use crate::{
             format::{
@@ -1897,41 +1897,41 @@ pub mod format {
         }
         fn parse_leaf_node(
             reader: &mut RefCursor<[u8]>,
-            parent_id: VirtualNodeId,
-            node_map: &VirtualNodeMap,
+            parent_id: IrNodeKey,
+            arena: &IrArena,
             name: String,
-        ) -> SlipstreamResult<VirtualNodeId> {
+        ) -> SlipstreamResult<IrNodeKey> {
             let magic: [u8; 4] = reader.read_u8_array()?;
             reader.set_position(reader.position() - 4);
             match magic {
-                ARC_MAGIC => deserialize_virtual(reader, Some(parent_id), node_map, name),
+                ARC_MAGIC => deserialize_virtual(reader, Some(parent_id), arena, name),
                 BRRES_MAGIC => {
-                    brres::deserialize_virtual(reader, Some(parent_id), node_map, name)
+                    brres::deserialize_virtual(reader, Some(parent_id), arena, name)
                 }
                 _ => {
-                    let id = node_map.next_id();
+                    let id = arena.next_id();
                     let node = VirtualNode {
                         label: name,
                         id,
-                        kind: VirtualNodeKind::Unknown,
+                        kind: IrNodeType::Unknown,
                         parent: Some(parent_id),
                         body: Deferred::evaluated(VirtualNodeBody {
                             children: Vec::new(),
                             inspectable: Some(Box::new(Raw { bytes: reader.clone() })),
                         }),
                     };
-                    node_map.insert(id, node);
+                    arena.insert(id, node);
                     Ok(id)
                 }
             }
         }
         fn parse_directory_tree(
             node_list: &mut [Node],
-            parent_id: Option<VirtualNodeId>,
-            node_map: &VirtualNodeMap,
+            parent_id: Option<IrNodeKey>,
+            arena: &IrArena,
             label: String,
             cursor: &mut usize,
-        ) -> SlipstreamResult<VirtualNodeId> {
+        ) -> SlipstreamResult<IrNodeKey> {
             let &NodeContent::Directory { skip_node, .. } = &node_list[*cursor].data
             else {
                 return Err(
@@ -1944,7 +1944,7 @@ pub mod format {
                 );
             };
             *cursor += 1;
-            let id = node_map.next_id();
+            let id = arena.next_id();
             let mut children = Vec::new();
             while *cursor < skip_node as usize && *cursor < node_list.len() {
                 let curr_node = &mut node_list[*cursor];
@@ -1954,14 +1954,14 @@ pub mod format {
                         let child = parse_directory_tree(
                             node_list,
                             Some(id),
-                            node_map,
+                            arena,
                             name,
                             cursor,
                         )?;
                         children.push(child);
                     }
                     NodeContent::File { data } => {
-                        let sections = parse_leaf_node(data, id, node_map, name)?;
+                        let sections = parse_leaf_node(data, id, arena, name)?;
                         children.push(sections);
                         *cursor += 1;
                     }
@@ -1971,7 +1971,7 @@ pub mod format {
                 label,
                 id,
                 parent: parent_id,
-                kind: VirtualNodeKind::ArcDirectory {
+                kind: IrNodeType::ArcDirectory {
                     empty: children.is_empty(),
                 },
                 body: Deferred::evaluated(VirtualNodeBody {
@@ -1979,15 +1979,15 @@ pub mod format {
                     inspectable: None,
                 }),
             };
-            node_map.insert(id, node);
+            arena.insert(id, node);
             Ok(id)
         }
         pub fn deserialize_virtual(
             reader: &mut RefCursor<[u8]>,
-            parent_id: Option<VirtualNodeId>,
-            node_map: &VirtualNodeMap,
+            parent_id: Option<IrNodeKey>,
+            arena: &IrArena,
             name: String,
-        ) -> SlipstreamResult<VirtualNodeId> {
+        ) -> SlipstreamResult<IrNodeKey> {
             {
                 use ::tracing::__macro_support::Callsite as _;
                 static __CALLSITE: ::tracing::callsite::DefaultCallsite = {
@@ -2264,7 +2264,7 @@ pub mod format {
             let ret = parse_directory_tree(
                 &mut nodes,
                 parent_id,
-                node_map,
+                arena,
                 name,
                 &mut cursor,
             )?;
@@ -2336,8 +2336,8 @@ pub mod format {
             UnsupportedError,
         };
         use crate::node::defer::Deferred;
-        use crate::node::node::{VirtualNode, VirtualNodeBody, VirtualNodeKind};
-        use crate::node::refs::{VirtualNodeId, VirtualNodeMap};
+        use crate::node::node::{VirtualNode, VirtualNodeBody, IrNodeType};
+        use crate::node::arena::{IrNodeKey, IrArena};
         use crate::{
             format::{
                 chr0::Chr0Subfile, encoding::{Deserialize, ReadArrayExt, ReadStringExt},
@@ -3071,41 +3071,41 @@ pub mod format {
         }
         fn deserialize_subfile(
             reader: &mut RefCursor<[u8]>,
-            parent_id: VirtualNodeId,
-            node_map: &VirtualNodeMap,
+            parent_id: IrNodeKey,
+            arena: &IrArena,
             name: String,
-        ) -> SlipstreamResult<VirtualNodeId> {
+        ) -> SlipstreamResult<IrNodeKey> {
             let magic = reader.read_u8_array::<4>()?;
             match magic {
                 MDL0_MAGIC => {
-                    mdl0::deserialize_virtual(reader, parent_id, node_map, name)
+                    mdl0::deserialize_virtual(reader, parent_id, arena, name)
                 }
                 _ => {
-                    let id = node_map.next_id();
+                    let id = arena.next_id();
                     let node = VirtualNode::from(VirtualNode {
                         label: String::from("TODO, UNPARSED FORMAT"),
                         id,
                         parent: Some(parent_id),
-                        kind: VirtualNodeKind::Unknown,
+                        kind: IrNodeType::Unknown,
                         body: Deferred::evaluated(VirtualNodeBody {
                             children: Vec::new(),
                             inspectable: Some(Box::new(Raw { bytes: reader.clone() })),
                         }),
                     });
-                    node_map.insert(id, node);
+                    arena.insert(id, node);
                     Ok(id)
                 }
             }
         }
         pub fn deserialize_virtual(
             reader: &mut RefCursor<[u8]>,
-            parent_id: Option<VirtualNodeId>,
-            node_map: &VirtualNodeMap,
+            parent_id: Option<IrNodeKey>,
+            arena: &IrArena,
             name: String,
-        ) -> SlipstreamResult<VirtualNodeId> {
+        ) -> SlipstreamResult<IrNodeKey> {
             let mut reader = reader.clone();
-            let brres_id = node_map.next_id();
-            let node_map2 = node_map.clone();
+            let brres_id = arena.next_id();
+            let arena2 = arena.clone();
             let name2 = name.clone();
             let parse_brres = move |_data| {
                 {
@@ -3175,7 +3175,7 @@ pub mod format {
                     let dir_name = root_index
                         .get_entry_name(&mut reader, dir)?
                         .to_owned();
-                    let dir_id = node_map2.next_id();
+                    let dir_id = arena2.next_id();
                     {
                         use ::tracing::__macro_support::Callsite as _;
                         static __CALLSITE: ::tracing::callsite::DefaultCallsite = {
@@ -3464,7 +3464,7 @@ pub mod format {
                                 deserialize_subfile(
                                     &mut reader,
                                     dir_id,
-                                    &node_map2,
+                                    &arena2,
                                     subfile_name,
                                 )
                             })?;
@@ -3474,13 +3474,13 @@ pub mod format {
                         label: dir_name,
                         id: dir_id,
                         parent: Some(brres_id),
-                        kind: VirtualNodeKind::BrresDirectory,
+                        kind: IrNodeType::BrresDirectory,
                         body: Deferred::evaluated(VirtualNodeBody {
                             children: subfiles,
                             inspectable: None,
                         }),
                     });
-                    node_map2.insert(dir_id, node);
+                    arena2.insert(dir_id, node);
                     directories.push(dir_id);
                 }
                 Ok(VirtualNodeBody {
@@ -3492,10 +3492,10 @@ pub mod format {
                 label: name,
                 id: brres_id,
                 parent: parent_id,
-                kind: VirtualNodeKind::BrresDirectory,
+                kind: IrNodeType::BrresDirectory,
                 body: Deferred::defer((), parse_brres)?,
             });
-            node_map.insert(brres_id, node);
+            arena.insert(brres_id, node);
             Ok(brres_id)
         }
     }
@@ -7888,8 +7888,8 @@ Bits: 30..32*/
             };
             use crate::format::brres::IndexGroup;
             use crate::node::defer::Deferred;
-            use crate::node::node::{VirtualNode, VirtualNodeBody, VirtualNodeKind};
-            use crate::node::refs::{VirtualNodeId, VirtualNodeMap};
+            use crate::node::node::{VirtualNode, VirtualNodeBody, IrNodeType};
+            use crate::node::arena::{IrNodeKey, IrArena};
             use crate::{
                 format::encoding::{Deserialize, ReadArrayExt},
                 shared::util::RefCursor,
@@ -9060,13 +9060,13 @@ Bits: 10..11*/
                 pub id: u32,
                 pub flags: BoneFlags,
                 pub billboard_setting: BillboardSetting,
-                pub billboard_reference: Option<VirtualNodeId>,
+                pub billboard_reference: Option<IrNodeKey>,
                 pub scaling_vector: [f32; 3],
                 pub rotation_vector: [f32; 3],
                 pub translation_vector: [f32; 3],
                 pub bounding_volume_min: [f32; 3],
                 pub bounding_volume_max: [f32; 3],
-                pub parent: Option<VirtualNodeId>,
+                pub parent: Option<IrNodeKey>,
                 pub user_data_offset: i32,
                 pub transform_matrix: [f32; 12],
                 pub inverse_matrix: [f32; 12],
@@ -9118,8 +9118,8 @@ Bits: 10..11*/
             impl VirtualBone {
                 pub fn from_bone(
                     bone: &Bone,
-                    billboard_id: Option<VirtualNodeId>,
-                    parent_id: Option<VirtualNodeId>,
+                    billboard_id: Option<IrNodeKey>,
+                    parent_id: Option<IrNodeKey>,
                 ) -> Self {
                     Self {
                         index: bone.index,
@@ -9141,27 +9141,27 @@ Bits: 10..11*/
             }
             fn build_skeleton_tree(
                 reader: &mut RefCursor<[u8]>,
-                parent_id: VirtualNodeId,
+                parent_id: IrNodeKey,
                 bones: &[NamedBone],
-                node_map: &VirtualNodeMap,
-            ) -> SlipstreamResult<VirtualNodeId> {
+                arena: &IrArena,
+            ) -> SlipstreamResult<IrNodeKey> {
                 /// The offset between the start of the bone and the bone's index.
                 const BONE_INDEX_OFFSET: u64 = 3 * 4;
                 let virtual_bones = bones
                     .iter()
                     .map(|bone| {
-                        let id = node_map.next_id();
+                        let id = arena.next_id();
                         let node = VirtualNode {
                             label: bone.name.clone(),
                             id,
-                            kind: VirtualNodeKind::Bone { end: true },
+                            kind: IrNodeType::Bone { end: true },
                             parent: None,
                             body: Deferred::evaluated(VirtualNodeBody {
                                 children: Vec::new(),
                                 inspectable: None,
                             }),
                         };
-                        node_map.insert(id, node);
+                        arena.insert(id, node);
                         id
                     })
                     .collect::<Vec<_>>();
@@ -9170,7 +9170,7 @@ Bits: 10..11*/
                     let curr_id = virtual_bones[i];
                     if bone.bone.parent_offset == 0 {
                         found_root = Some(i);
-                        let node = node_map
+                        let node = arena
                             .get(curr_id)
                             .expect("virtual node that was just added does not exist");
                         let mut lock = node.write();
@@ -9181,7 +9181,7 @@ Bits: 10..11*/
                                 );
                             });
                         lock.parent = Some(parent_id);
-                        lock.kind = VirtualNodeKind::Bone {
+                        lock.kind = IrNodeType::Bone {
                             end: false,
                         };
                         continue;
@@ -9204,7 +9204,7 @@ Bits: 10..11*/
                         );
                     }
                     let parent_id = virtual_bones[parent_index as usize];
-                    let parent_node = node_map
+                    let parent_node = arena
                         .get(parent_id)
                         .ok_or_else(|| {
                             SlipstreamError::from(InvalidInputError {
@@ -9218,7 +9218,7 @@ Bits: 10..11*/
                         })?;
                     {
                         let mut lock = parent_node.write();
-                        lock.kind = VirtualNodeKind::Bone {
+                        lock.kind = IrNodeType::Bone {
                             end: false,
                         };
                         lock.body
@@ -9226,7 +9226,7 @@ Bits: 10..11*/
                                 body.children.push(curr_id);
                             });
                     }
-                    let curr_node = node_map
+                    let curr_node = arena
                         .get(curr_id)
                         .ok_or_else(|| {
                             SlipstreamError::from(InvalidInputError {
@@ -9323,8 +9323,8 @@ Bits: 10..11*/
             }
             pub fn deserialize_skeleton(
                 reader: &mut RefCursor<[u8]>,
-                parent_id: VirtualNodeId,
-                node_map: &VirtualNodeMap,
+                parent_id: IrNodeKey,
+                arena: &IrArena,
             ) -> SlipstreamResult<VirtualNodeBody> {
                 {}
                 #[allow(clippy::suspicious_else_formatting)]
@@ -9442,7 +9442,7 @@ Bits: 10..11*/
                                 reader,
                                 parent_id,
                                 &bones,
-                                node_map,
+                                arena,
                             )?;
                             Ok(VirtualNodeBody {
                                 inspectable: None,
@@ -9464,8 +9464,8 @@ Bits: 10..11*/
             use crate::format::brres::IndexGroup;
             use crate::format::encoding::Deserialize;
             use crate::node::defer::Deferred;
-            use crate::node::node::{VirtualNode, VirtualNodeBody, VirtualNodeKind};
-            use crate::node::refs::{VirtualNodeId, VirtualNodeMap, VirtualNodeRef};
+            use crate::node::node::{VirtualNode, VirtualNodeBody, IrNodeType};
+            use crate::node::arena::{IrNodeKey, IrArena, VirtualNodeRef};
             use crate::{format::mdl0::SectionDeserialize, shared::util::RefCursor};
             pub struct MapNode {
                 pub bone_index: u16,
@@ -10016,8 +10016,8 @@ Bits: 10..11*/
             }
             pub fn deserialize_virtual(
                 reader: &mut RefCursor<[u8]>,
-                parent_id: VirtualNodeId,
-                node_map: &VirtualNodeMap,
+                parent_id: IrNodeKey,
+                arena: &IrArena,
             ) -> SlipstreamResult<VirtualNodeBody> {
                 {}
                 #[allow(clippy::suspicious_else_formatting)]
@@ -10129,18 +10129,18 @@ Bits: 10..11*/
                                 let data_start = section_index.get_entry_data_start(entry);
                                 reader.set_position(data_start as u64);
                                 let draw_list = Bytecode::deserialize(reader)?;
-                                let id = node_map.next_id();
+                                let id = arena.next_id();
                                 let node = VirtualNode {
                                     label: name,
                                     id,
-                                    kind: VirtualNodeKind::Bytecode,
+                                    kind: IrNodeType::Bytecode,
                                     parent: Some(parent_id),
                                     body: Deferred::evaluated(VirtualNodeBody {
                                         children: Vec::new(),
                                         inspectable: Some(Box::new(draw_list)),
                                     }),
                                 };
-                                node_map.insert(id, node);
+                                arena.insert(id, node);
                                 children.push(id);
                             }
                             match &children {
@@ -10177,8 +10177,8 @@ Bits: 10..11*/
                 format::{brres::IndexGroup, encoding::{Deserialize, ReadArrayExt}},
                 node::{
                     defer::Deferred,
-                    node::{VirtualNode, VirtualNodeBody, VirtualNodeKind},
-                    refs::{VirtualNodeId, VirtualNodeMap},
+                    node::{VirtualNode, VirtualNodeBody, IrNodeType},
+                    refs::{IrNodeKey, IrArena},
                 },
                 shared::util::RefCursor,
             };
@@ -10564,8 +10564,8 @@ Bits: 10..11*/
             }
             pub fn deserialize_virtual(
                 reader: &mut RefCursor<[u8]>,
-                parent_id: VirtualNodeId,
-                node_map: &VirtualNodeMap,
+                parent_id: IrNodeKey,
+                arena: &IrArena,
             ) -> SlipstreamResult<VirtualNodeBody> {
                 {}
                 #[allow(clippy::suspicious_else_formatting)]
@@ -10677,18 +10677,18 @@ Bits: 10..11*/
                                 let data_start = section_index.get_entry_data_start(entry);
                                 reader.set_position(data_start as u64);
                                 let colors = ColorBuf::deserialize(reader)?;
-                                let id = node_map.next_id();
+                                let id = arena.next_id();
                                 let node = VirtualNode {
                                     label: name,
                                     id,
-                                    kind: VirtualNodeKind::Colors,
+                                    kind: IrNodeType::Colors,
                                     parent: Some(parent_id),
                                     body: Deferred::evaluated(VirtualNodeBody {
                                         children: Vec::new(),
                                         inspectable: Some(Box::new(colors)),
                                     }),
                                 };
-                                node_map.insert(id, node);
+                                arena.insert(id, node);
                                 children.push(id);
                             }
                             Ok(VirtualNodeBody {
@@ -25367,8 +25367,8 @@ Bits: 15..18*/
                 },
                 node::{
                     defer::Deferred,
-                    node::{VirtualNode, VirtualNodeBody, VirtualNodeKind},
-                    refs::{VirtualNodeId, VirtualNodeMap},
+                    node::{VirtualNode, VirtualNodeBody, IrNodeType},
+                    refs::{IrNodeKey, IrArena},
                 },
                 shared::util::RefCursor,
             };
@@ -29700,8 +29700,8 @@ Bits: 5..6*/
             pub fn deserialize_virtual(
                 reader: &mut RefCursor<[u8]>,
                 header_start: u32,
-                parent_id: VirtualNodeId,
-                node_map: &VirtualNodeMap,
+                parent_id: IrNodeKey,
+                arena: &IrArena,
             ) -> SlipstreamResult<VirtualNodeBody> {
                 {}
                 #[allow(clippy::suspicious_else_formatting)]
@@ -29813,18 +29813,18 @@ Bits: 5..6*/
                                 let data_start = section_index.get_entry_data_start(entry);
                                 reader.set_position(data_start as u64);
                                 let material = MaterialBuf::deserialize(reader)?;
-                                let id = node_map.next_id();
+                                let id = arena.next_id();
                                 let node = VirtualNode {
                                     label: name,
                                     id,
                                     parent: Some(parent_id),
-                                    kind: VirtualNodeKind::Materials,
+                                    kind: IrNodeType::Materials,
                                     body: Deferred::evaluated(VirtualNodeBody {
                                         children: Vec::new(),
                                         inspectable: Some(Box::new(material)),
                                     }),
                                 };
-                                node_map.insert(id, node);
+                                arena.insert(id, node);
                                 materials.push(id);
                             }
                             Ok(VirtualNodeBody {
@@ -29843,8 +29843,8 @@ Bits: 5..6*/
             use crate::format::brres::IndexGroup;
             use crate::format::mdl0::util::VectorDivisor;
             use crate::node::defer::Deferred;
-            use crate::node::node::{VirtualNode, VirtualNodeBody, VirtualNodeKind};
-            use crate::node::refs::{VirtualNodeId, VirtualNodeMap};
+            use crate::node::node::{VirtualNode, VirtualNodeBody, IrNodeType};
+            use crate::node::arena::{IrNodeKey, IrArena};
             use crate::{
                 format::{
                     encoding::Deserialize,
@@ -30240,8 +30240,8 @@ Bits: 5..6*/
             pub fn deserialize_virtual(
                 reader: &mut RefCursor<[u8]>,
                 header_start: u32,
-                parent_id: VirtualNodeId,
-                node_map: &VirtualNodeMap,
+                parent_id: IrNodeKey,
+                arena: &IrArena,
             ) -> SlipstreamResult<VirtualNodeBody> {
                 {}
                 #[allow(clippy::suspicious_else_formatting)]
@@ -30353,18 +30353,18 @@ Bits: 5..6*/
                                 let data_start = section_index.get_entry_data_start(entry);
                                 reader.set_position(data_start as u64);
                                 let normals = NormalBuf::deserialize(reader, header_start)?;
-                                let id = node_map.next_id();
+                                let id = arena.next_id();
                                 let node = VirtualNode {
                                     label: name,
                                     id,
-                                    kind: VirtualNodeKind::Normals,
+                                    kind: IrNodeType::Normals,
                                     parent: Some(parent_id),
                                     body: Deferred::evaluated(VirtualNodeBody {
                                         children: Vec::new(),
                                         inspectable: Some(Box::new(normals)),
                                     }),
                                 };
-                                node_map.insert(id, node);
+                                arena.insert(id, node);
                                 models.push(id);
                             }
                             Ok(VirtualNodeBody {
@@ -30382,8 +30382,8 @@ Bits: 5..6*/
                 error::SlipstreamResult, format::{brres::IndexGroup, encoding::Deserialize},
                 node::{
                     defer::Deferred,
-                    node::{VirtualNode, VirtualNodeBody, VirtualNodeKind},
-                    refs::{VirtualNodeId, VirtualNodeMap},
+                    node::{VirtualNode, VirtualNodeBody, IrNodeType},
+                    refs::{IrNodeKey, IrArena},
                 },
                 shared::util::RefCursor,
             };
@@ -30476,8 +30476,8 @@ Bits: 5..6*/
             }
             pub fn deserialize_virtual(
                 reader: &mut RefCursor<[u8]>,
-                parent_id: VirtualNodeId,
-                node_map: &VirtualNodeMap,
+                parent_id: IrNodeKey,
+                arena: &IrArena,
             ) -> SlipstreamResult<VirtualNodeBody> {
                 {}
                 #[allow(clippy::suspicious_else_formatting)]
@@ -30589,18 +30589,18 @@ Bits: 5..6*/
                                 let data_start = section_index.get_entry_data_start(entry);
                                 reader.set_position(data_start as u64);
                                 let links = PaletteLinks::deserialize(reader)?;
-                                let id = node_map.next_id();
+                                let id = arena.next_id();
                                 let node = VirtualNode {
                                     label: name,
                                     id,
                                     parent: Some(parent_id),
-                                    kind: VirtualNodeKind::PaletteLinks,
+                                    kind: IrNodeType::PaletteLinks,
                                     body: Deferred::evaluated(VirtualNodeBody {
                                         children: Vec::new(),
                                         inspectable: Some(Box::new(links)),
                                     }),
                                 };
-                                node_map.insert(id, node);
+                                arena.insert(id, node);
                                 children.push(id);
                             }
                             Ok(VirtualNodeBody {
@@ -30629,8 +30629,8 @@ Bits: 5..6*/
                 },
                 node::{
                     defer::Deferred,
-                    node::{VirtualNode, VirtualNodeBody, VirtualNodeKind},
-                    refs::{VirtualNodeId, VirtualNodeMap},
+                    node::{VirtualNode, VirtualNodeBody, IrNodeType},
+                    refs::{IrNodeKey, IrArena},
                 },
                 shared::util::RefCursor,
             };
@@ -31286,8 +31286,8 @@ Bits: 5..6*/
             pub fn deserialize_virtual(
                 reader: &mut RefCursor<[u8]>,
                 header_start: u32,
-                parent_id: VirtualNodeId,
-                node_map: &VirtualNodeMap,
+                parent_id: IrNodeKey,
+                arena: &IrArena,
             ) -> SlipstreamResult<VirtualNodeBody> {
                 {}
                 #[allow(clippy::suspicious_else_formatting)]
@@ -31399,18 +31399,18 @@ Bits: 5..6*/
                                 let data_start = section_index.get_entry_data_start(entry);
                                 reader.set_position(data_start as u64);
                                 let object = Polygon::deserialize(reader)?;
-                                let id = node_map.next_id();
+                                let id = arena.next_id();
                                 let node = VirtualNode {
                                     label: name,
                                     id,
-                                    kind: VirtualNodeKind::Polygon,
+                                    kind: IrNodeType::Polygon,
                                     parent: Some(parent_id),
                                     body: Deferred::evaluated(VirtualNodeBody {
                                         children: Vec::new(),
                                         inspectable: Some(Box::new(object)),
                                     }),
                                 };
-                                node_map.insert(id, node);
+                                arena.insert(id, node);
                                 children.push(id);
                             }
                             Ok(VirtualNodeBody {
@@ -31428,8 +31428,8 @@ Bits: 5..6*/
             use crate::format::encoding::{Deserialize, ReadArrayExt};
             use crate::format::mdl0::gx::GxBytecode;
             use crate::node::defer::Deferred;
-            use crate::node::node::{VirtualNode, VirtualNodeBody, VirtualNodeKind};
-            use crate::node::refs::{VirtualNodeId, VirtualNodeMap};
+            use crate::node::node::{VirtualNode, VirtualNodeBody, IrNodeType};
+            use crate::node::arena::{IrNodeKey, IrArena};
             use crate::shared::util::RefCursor;
             use byteorder::{BigEndian, ReadBytesExt};
             pub struct Tev {
@@ -31485,8 +31485,8 @@ Bits: 5..6*/
             }
             pub fn deserialize_virtual(
                 reader: &mut RefCursor<[u8]>,
-                parent_id: VirtualNodeId,
-                node_map: &VirtualNodeMap,
+                parent_id: IrNodeKey,
+                arena: &IrArena,
             ) -> SlipstreamResult<VirtualNodeBody> {
                 {}
                 #[allow(clippy::suspicious_else_formatting)]
@@ -31598,18 +31598,18 @@ Bits: 5..6*/
                                 let data_start = section_index.get_entry_data_start(entry);
                                 reader.set_position(data_start as u64);
                                 let tev = Tev::deserialize(reader)?;
-                                let id = node_map.next_id();
+                                let id = arena.next_id();
                                 let node = VirtualNode {
                                     label: name,
                                     id,
                                     parent: Some(parent_id),
-                                    kind: VirtualNodeKind::Tevs,
+                                    kind: IrNodeType::Tevs,
                                     body: Deferred::evaluated(VirtualNodeBody {
                                         children: Vec::new(),
                                         inspectable: Some(Box::new(tev)),
                                     }),
                                 };
-                                node_map.insert(id, node);
+                                arena.insert(id, node);
                                 tevs.push(id);
                             }
                             {
@@ -31684,8 +31684,8 @@ Bits: 5..6*/
                 error::SlipstreamResult, format::{brres::IndexGroup, encoding::Deserialize},
                 node::{
                     defer::Deferred,
-                    node::{VirtualNode, VirtualNodeBody, VirtualNodeKind},
-                    refs::{VirtualNodeId, VirtualNodeMap},
+                    node::{VirtualNode, VirtualNodeBody, IrNodeType},
+                    refs::{IrNodeKey, IrArena},
                 },
                 shared::util::RefCursor,
             };
@@ -31778,8 +31778,8 @@ Bits: 5..6*/
             }
             pub fn deserialize_virtual(
                 reader: &mut RefCursor<[u8]>,
-                parent_id: VirtualNodeId,
-                node_map: &VirtualNodeMap,
+                parent_id: IrNodeKey,
+                arena: &IrArena,
             ) -> SlipstreamResult<VirtualNodeBody> {
                 {}
                 #[allow(clippy::suspicious_else_formatting)]
@@ -31891,18 +31891,18 @@ Bits: 5..6*/
                                 let data_start = section_index.get_entry_data_start(entry);
                                 reader.set_position(data_start as u64);
                                 let links = TextureLinks::deserialize(reader)?;
-                                let id = node_map.next_id();
+                                let id = arena.next_id();
                                 let node = VirtualNode {
                                     label: name,
                                     id,
                                     parent: Some(parent_id),
-                                    kind: VirtualNodeKind::TextureLinks,
+                                    kind: IrNodeType::TextureLinks,
                                     body: Deferred::evaluated(VirtualNodeBody {
                                         children: Vec::new(),
                                         inspectable: Some(Box::new(links)),
                                     }),
                                 };
-                                node_map.insert(id, node);
+                                arena.insert(id, node);
                                 children.push(id);
                             }
                             Ok(VirtualNodeBody {
@@ -32309,8 +32309,8 @@ Bits: 5..6*/
                 },
                 node::{
                     defer::Deferred,
-                    node::{VirtualNode, VirtualNodeBody, VirtualNodeKind},
-                    refs::{VirtualNodeId, VirtualNodeMap},
+                    node::{VirtualNode, VirtualNodeBody, IrNodeType},
+                    refs::{IrNodeKey, IrArena},
                 },
                 shared::util::RefCursor,
             };
@@ -32569,8 +32569,8 @@ Bits: 5..6*/
             pub fn deserialize_virtual(
                 reader: &mut RefCursor<[u8]>,
                 header_start: u32,
-                parent_id: VirtualNodeId,
-                node_map: &VirtualNodeMap,
+                parent_id: IrNodeKey,
+                arena: &IrArena,
             ) -> SlipstreamResult<VirtualNodeBody> {
                 {}
                 #[allow(clippy::suspicious_else_formatting)]
@@ -32682,18 +32682,18 @@ Bits: 5..6*/
                                 let data_start = section_index.get_entry_data_start(entry);
                                 reader.set_position(data_start as u64);
                                 let uvs = UvBuf::deserialize(reader, header_start)?;
-                                let id = node_map.next_id();
+                                let id = arena.next_id();
                                 let node = VirtualNode {
                                     label: name,
                                     id,
-                                    kind: VirtualNodeKind::Uvs,
+                                    kind: IrNodeType::Uvs,
                                     parent: Some(parent_id),
                                     body: Deferred::evaluated(VirtualNodeBody {
                                         children: Vec::new(),
                                         inspectable: Some(Box::new(uvs)),
                                     }),
                                 };
-                                node_map.insert(id, node);
+                                arena.insert(id, node);
                                 children.push(id);
                             }
                             Ok(VirtualNodeBody {
@@ -32712,8 +32712,8 @@ Bits: 5..6*/
             use crate::format::brres::IndexGroup;
             use crate::format::mdl0::util::VectorDivisor;
             use crate::node::defer::Deferred;
-            use crate::node::node::{VirtualNode, VirtualNodeBody, VirtualNodeKind};
-            use crate::node::refs::{VirtualNodeId, VirtualNodeMap};
+            use crate::node::node::{VirtualNode, VirtualNodeBody, IrNodeType};
+            use crate::node::arena::{IrNodeKey, IrArena};
             use crate::panes::viewer::translator::TranslatedModel;
             use crate::{
                 format::{
@@ -33120,8 +33120,8 @@ Bits: 5..6*/
             pub fn deserialize_virtual(
                 reader: &mut RefCursor<[u8]>,
                 header_start: u32,
-                parent_id: VirtualNodeId,
-                node_map: &VirtualNodeMap,
+                parent_id: IrNodeKey,
+                arena: &IrArena,
             ) -> SlipstreamResult<VirtualNodeBody> {
                 {}
                 #[allow(clippy::suspicious_else_formatting)]
@@ -33233,18 +33233,18 @@ Bits: 5..6*/
                                 let data_start = section_index.get_entry_data_start(entry);
                                 reader.set_position(data_start as u64);
                                 let model = VertexBuf::deserialize(reader, header_start)?;
-                                let id = node_map.next_id();
+                                let id = arena.next_id();
                                 let node = VirtualNode {
                                     label: name,
                                     id,
-                                    kind: VirtualNodeKind::Vertices,
+                                    kind: IrNodeType::Vertices,
                                     parent: Some(parent_id),
                                     body: Deferred::evaluated(VirtualNodeBody {
                                         children: Vec::new(),
                                         inspectable: Some(Box::new(model)),
                                     }),
                                 };
-                                node_map.insert(id, node);
+                                arena.insert(id, node);
                                 models.push(id);
                             }
                             Ok(VirtualNodeBody {
@@ -33259,8 +33259,8 @@ Bits: 5..6*/
         use std::collections::HashMap;
         use crate::error::{CorruptionError, SlipstreamError, SlipstreamResult, UnsupportedError};
         use crate::node::defer::Deferred;
-        use crate::node::node::{VirtualNode, VirtualNodeBody, VirtualNodeKind};
-        use crate::node::refs::{VirtualNodeId, VirtualNodeMap};
+        use crate::node::node::{VirtualNode, VirtualNodeBody, IrNodeType};
+        use crate::node::arena::{IrNodeKey, IrArena};
         use crate::{
             format::{
                 brres::{self, IndexGroup, SubfileHeader, SubfileType},
@@ -33859,10 +33859,10 @@ Bits: 5..6*/
         }
         pub fn deserialize_virtual(
             reader: &mut RefCursor<[u8]>,
-            parent_id: VirtualNodeId,
-            node_map: &VirtualNodeMap,
+            parent_id: IrNodeKey,
+            arena: &IrArena,
             name: String,
-        ) -> SlipstreamResult<VirtualNodeId> {
+        ) -> SlipstreamResult<IrNodeKey> {
             {}
             #[allow(clippy::suspicious_else_formatting)]
             {
@@ -33965,7 +33965,7 @@ Bits: 5..6*/
                         clippy::unreachable
                     )]
                     if false {
-                        let __tracing_attr_fake_return: SlipstreamResult<VirtualNodeId> = loop {};
+                        let __tracing_attr_fake_return: SlipstreamResult<IrNodeKey> = loop {};
                         return __tracing_attr_fake_return;
                     }
                     {
@@ -34064,7 +34064,7 @@ Bits: 5..6*/
                         let _mdl0_header = Mdl0Header::deserialize(reader)?;
                         let _bone_links = BoneLinkTable::deserialize(reader)?;
                         let _index_group = IndexGroup::deserialize(reader)?;
-                        let mdl_node_id = node_map.next_id();
+                        let mdl_node_id = arena.next_id();
                         let mut files = Vec::with_capacity(subfile_header.offsets.len());
                         for (i, &section_offset) in subfile_header
                             .offsets
@@ -34076,8 +34076,8 @@ Bits: 5..6*/
                             }
                             let section_ty = SectionType::try_from(i as u32)?;
                             let mut reader = reader.clone();
-                            let node_map2 = node_map.clone();
-                            let section_id = node_map.next_id();
+                            let arena2 = arena.clone();
+                            let section_id = arena.next_id();
                             let section_start = subfile_header.header_start as i64
                                 + section_offset as i64;
                             reader.set_position(section_start as u64);
@@ -34144,14 +34144,14 @@ Bits: 5..6*/
                                     bytecode::deserialize_virtual(
                                         &mut reader,
                                         parent_id,
-                                        &node_map2,
+                                        &arena2,
                                     )
                                 }
                                 SectionType::Bones => {
                                     bones::deserialize_skeleton(
                                         &mut reader,
                                         parent_id,
-                                        &node_map2,
+                                        &arena2,
                                     )
                                 }
                                 SectionType::Vertices => {
@@ -34159,7 +34159,7 @@ Bits: 5..6*/
                                         &mut reader,
                                         subfile_header.header_start,
                                         parent_id,
-                                        &node_map2,
+                                        &arena2,
                                     )
                                 }
                                 SectionType::Normals => {
@@ -34167,14 +34167,14 @@ Bits: 5..6*/
                                         &mut reader,
                                         subfile_header.header_start,
                                         parent_id,
-                                        &node_map2,
+                                        &arena2,
                                     )
                                 }
                                 SectionType::Colors => {
                                     colors::deserialize_virtual(
                                         &mut reader,
                                         parent_id,
-                                        &node_map2,
+                                        &arena2,
                                     )
                                 }
                                 SectionType::UvCoordinates => {
@@ -34182,7 +34182,7 @@ Bits: 5..6*/
                                         &mut reader,
                                         subfile_header.header_start,
                                         parent_id,
-                                        &node_map2,
+                                        &arena2,
                                     )
                                 }
                                 SectionType::Materials => {
@@ -34190,14 +34190,14 @@ Bits: 5..6*/
                                         &mut reader,
                                         subfile_header.header_start,
                                         parent_id,
-                                        &node_map2,
+                                        &arena2,
                                     )
                                 }
                                 SectionType::Tevs => {
                                     tevs::deserialize_virtual(
                                         &mut reader,
                                         parent_id,
-                                        &node_map2,
+                                        &arena2,
                                     )
                                 }
                                 SectionType::Polygons => {
@@ -34205,14 +34205,14 @@ Bits: 5..6*/
                                         &mut reader,
                                         subfile_header.header_start,
                                         parent_id,
-                                        &node_map2,
+                                        &arena2,
                                     )
                                 }
                                 SectionType::TextureLinks => {
                                     tex_links::deserialize_virtual(
                                         &mut reader,
                                         parent_id,
-                                        &node_map2,
+                                        &arena2,
                                     )
                                 }
                                 _ => {
@@ -34226,23 +34226,23 @@ Bits: 5..6*/
                                 label: MDL0_SECTION_NAMES[i].to_owned(),
                                 id: section_id,
                                 parent: Some(mdl_node_id),
-                                kind: VirtualNodeKind::BrresDirectory,
+                                kind: IrNodeType::BrresDirectory,
                                 body: Deferred::evaluated(node_body),
                             });
-                            node_map.insert(section_id, node);
+                            arena.insert(section_id, node);
                             files.push(section_id);
                         }
                         let node = VirtualNode::from(VirtualNode {
                             label: name,
                             id: mdl_node_id,
                             parent: Some(parent_id),
-                            kind: VirtualNodeKind::Mdl0Root,
+                            kind: IrNodeType::Mdl0Root,
                             body: Deferred::evaluated(VirtualNodeBody {
                                 children: files,
                                 inspectable: None,
                             }),
                         });
-                        node_map.insert(mdl_node_id, node);
+                        arena.insert(mdl_node_id, node);
                         Ok(mdl_node_id)
                     }
                 }
@@ -35302,7 +35302,7 @@ pub mod node {
         use parking_lot::Mutex;
         use crate::error::SlipstreamResult;
         use crate::node::defer::Deferred;
-        use crate::node::refs::VirtualNodeId;
+        use crate::node::arena::IrNodeKey;
         use crate::panes::{PaneAction, RequestNewPane, RequestPaneEdit};
         use crate::shared::util::AssertSendSync;
         use crate::{fill_icon, reg_icon};
@@ -35312,7 +35312,7 @@ pub mod node {
             fn as_any_mut(&mut self) -> &mut dyn Any;
         }
         pub struct VirtualNodeBody {
-            pub children: Vec<VirtualNodeId>,
+            pub children: Vec<IrNodeKey>,
             pub inspectable: Option<Box<dyn Inspectable>>,
         }
         #[automatically_derived]
@@ -35331,14 +35331,14 @@ pub mod node {
         }
         pub struct VirtualNode {
             pub label: String,
-            pub id: VirtualNodeId,
+            pub id: IrNodeKey,
             /// Determines how this node is displayed in the file tree.
             ///
             /// If the node kind is [`Container`], it will be displayed as a directory.
             ///
-            /// [`Container`](VirtualNodeKind::Container)
-            pub kind: VirtualNodeKind,
-            pub parent: Option<VirtualNodeId>,
+            /// [`Container`](IrNodeType::Container)
+            pub kind: IrNodeType,
+            pub parent: Option<IrNodeKey>,
             pub body: Deferred<VirtualNodeBody>,
         }
         #[automatically_derived]
@@ -35396,7 +35396,7 @@ pub mod node {
                         }),
                     );
                 }
-                if self.kind == VirtualNodeKind::Mdl0Root {
+                if self.kind == IrNodeType::Mdl0Root {
                     if ui.button("Open in 3D viewer").clicked() {
                         cmd.send(
                             PaneAction::RequestNewPane(RequestNewPane::Viewer {
@@ -35421,7 +35421,7 @@ pub mod node {
                 self.body.is_deferred()
             }
         }
-        pub enum VirtualNodeKind {
+        pub enum IrNodeType {
             /// This virtual node can contain other nodes.
             ///
             /// This is used for both directories and files that contain multiple subfiles/sections.
@@ -35442,11 +35442,11 @@ pub mod node {
             Unknown,
         }
         #[automatically_derived]
-        impl ::core::fmt::Debug for VirtualNodeKind {
+        impl ::core::fmt::Debug for IrNodeType {
             #[inline]
             fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
                 match self {
-                    VirtualNodeKind::ArcDirectory { empty: __self_0 } => {
+                    IrNodeType::ArcDirectory { empty: __self_0 } => {
                         ::core::fmt::Formatter::debug_struct_field1_finish(
                             f,
                             "ArcDirectory",
@@ -35454,16 +35454,16 @@ pub mod node {
                             &__self_0,
                         )
                     }
-                    VirtualNodeKind::BrresDirectory => {
+                    IrNodeType::BrresDirectory => {
                         ::core::fmt::Formatter::write_str(f, "BrresDirectory")
                     }
-                    VirtualNodeKind::Mdl0Root => {
+                    IrNodeType::Mdl0Root => {
                         ::core::fmt::Formatter::write_str(f, "Mdl0Root")
                     }
-                    VirtualNodeKind::Bytecode => {
+                    IrNodeType::Bytecode => {
                         ::core::fmt::Formatter::write_str(f, "Bytecode")
                     }
-                    VirtualNodeKind::Bone { end: __self_0 } => {
+                    IrNodeType::Bone { end: __self_0 } => {
                         ::core::fmt::Formatter::debug_struct_field1_finish(
                             f,
                             "Bone",
@@ -35471,72 +35471,72 @@ pub mod node {
                             &__self_0,
                         )
                     }
-                    VirtualNodeKind::Vertices => {
+                    IrNodeType::Vertices => {
                         ::core::fmt::Formatter::write_str(f, "Vertices")
                     }
-                    VirtualNodeKind::Normals => {
+                    IrNodeType::Normals => {
                         ::core::fmt::Formatter::write_str(f, "Normals")
                     }
-                    VirtualNodeKind::Colors => {
+                    IrNodeType::Colors => {
                         ::core::fmt::Formatter::write_str(f, "Colors")
                     }
-                    VirtualNodeKind::Uvs => ::core::fmt::Formatter::write_str(f, "Uvs"),
-                    VirtualNodeKind::Materials => {
+                    IrNodeType::Uvs => ::core::fmt::Formatter::write_str(f, "Uvs"),
+                    IrNodeType::Materials => {
                         ::core::fmt::Formatter::write_str(f, "Materials")
                     }
-                    VirtualNodeKind::Tevs => ::core::fmt::Formatter::write_str(f, "Tevs"),
-                    VirtualNodeKind::Polygon => {
+                    IrNodeType::Tevs => ::core::fmt::Formatter::write_str(f, "Tevs"),
+                    IrNodeType::Polygon => {
                         ::core::fmt::Formatter::write_str(f, "Polygon")
                     }
-                    VirtualNodeKind::TextureLinks => {
+                    IrNodeType::TextureLinks => {
                         ::core::fmt::Formatter::write_str(f, "TextureLinks")
                     }
-                    VirtualNodeKind::PaletteLinks => {
+                    IrNodeType::PaletteLinks => {
                         ::core::fmt::Formatter::write_str(f, "PaletteLinks")
                     }
-                    VirtualNodeKind::Unknown => {
+                    IrNodeType::Unknown => {
                         ::core::fmt::Formatter::write_str(f, "Unknown")
                     }
                 }
             }
         }
         #[automatically_derived]
-        impl ::core::marker::Copy for VirtualNodeKind {}
+        impl ::core::marker::Copy for IrNodeType {}
         #[automatically_derived]
         #[doc(hidden)]
-        unsafe impl ::core::clone::TrivialClone for VirtualNodeKind {}
+        unsafe impl ::core::clone::TrivialClone for IrNodeType {}
         #[automatically_derived]
-        impl ::core::clone::Clone for VirtualNodeKind {
+        impl ::core::clone::Clone for IrNodeType {
             #[inline]
-            fn clone(&self) -> VirtualNodeKind {
+            fn clone(&self) -> IrNodeType {
                 let _: ::core::clone::AssertParamIsClone<bool>;
                 *self
             }
         }
         #[automatically_derived]
-        impl ::core::marker::StructuralPartialEq for VirtualNodeKind {}
+        impl ::core::marker::StructuralPartialEq for IrNodeType {}
         #[automatically_derived]
-        impl ::core::cmp::PartialEq for VirtualNodeKind {
+        impl ::core::cmp::PartialEq for IrNodeType {
             #[inline]
-            fn eq(&self, other: &VirtualNodeKind) -> bool {
+            fn eq(&self, other: &IrNodeType) -> bool {
                 let __self_discr = ::core::intrinsics::discriminant_value(self);
                 let __arg1_discr = ::core::intrinsics::discriminant_value(other);
                 __self_discr == __arg1_discr
                     && match (self, other) {
                         (
-                            VirtualNodeKind::ArcDirectory { empty: __self_0 },
-                            VirtualNodeKind::ArcDirectory { empty: __arg1_0 },
+                            IrNodeType::ArcDirectory { empty: __self_0 },
+                            IrNodeType::ArcDirectory { empty: __arg1_0 },
                         ) => __self_0 == __arg1_0,
                         (
-                            VirtualNodeKind::Bone { end: __self_0 },
-                            VirtualNodeKind::Bone { end: __arg1_0 },
+                            IrNodeType::Bone { end: __self_0 },
+                            IrNodeType::Bone { end: __arg1_0 },
                         ) => __self_0 == __arg1_0,
                         _ => true,
                     }
             }
         }
         #[automatically_derived]
-        impl ::core::cmp::Eq for VirtualNodeKind {
+        impl ::core::cmp::Eq for IrNodeType {
             #[inline]
             #[doc(hidden)]
             #[coverage(off)]
@@ -35544,7 +35544,7 @@ pub mod node {
                 let _: ::core::cmp::AssertParamIsEq<bool>;
             }
         }
-        impl VirtualNodeKind {
+        impl IrNodeType {
             /// Whether this node is expandable.
             ///
             /// This determines whether this node will have a collapsible header.
@@ -35644,42 +35644,42 @@ pub mod node {
         use std::num::NonZeroUsize;
         use std::sync::Arc;
         use std::sync::atomic::{AtomicUsize, Ordering};
-        pub struct VirtualNodeId(NonZeroUsize);
+        pub struct IrNodeKey(NonZeroUsize);
         #[automatically_derived]
-        impl ::core::fmt::Debug for VirtualNodeId {
+        impl ::core::fmt::Debug for IrNodeKey {
             #[inline]
             fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
                 ::core::fmt::Formatter::debug_tuple_field1_finish(
                     f,
-                    "VirtualNodeId",
+                    "IrNodeKey",
                     &&self.0,
                 )
             }
         }
         #[automatically_derived]
-        impl ::core::marker::Copy for VirtualNodeId {}
+        impl ::core::marker::Copy for IrNodeKey {}
         #[automatically_derived]
         #[doc(hidden)]
-        unsafe impl ::core::clone::TrivialClone for VirtualNodeId {}
+        unsafe impl ::core::clone::TrivialClone for IrNodeKey {}
         #[automatically_derived]
-        impl ::core::clone::Clone for VirtualNodeId {
+        impl ::core::clone::Clone for IrNodeKey {
             #[inline]
-            fn clone(&self) -> VirtualNodeId {
+            fn clone(&self) -> IrNodeKey {
                 let _: ::core::clone::AssertParamIsClone<NonZeroUsize>;
                 *self
             }
         }
         #[automatically_derived]
-        impl ::core::marker::StructuralPartialEq for VirtualNodeId {}
+        impl ::core::marker::StructuralPartialEq for IrNodeKey {}
         #[automatically_derived]
-        impl ::core::cmp::PartialEq for VirtualNodeId {
+        impl ::core::cmp::PartialEq for IrNodeKey {
             #[inline]
-            fn eq(&self, other: &VirtualNodeId) -> bool {
+            fn eq(&self, other: &IrNodeKey) -> bool {
                 self.0 == other.0
             }
         }
         #[automatically_derived]
-        impl ::core::cmp::Eq for VirtualNodeId {
+        impl ::core::cmp::Eq for IrNodeKey {
             #[inline]
             #[doc(hidden)]
             #[coverage(off)]
@@ -35688,18 +35688,18 @@ pub mod node {
             }
         }
         #[automatically_derived]
-        impl ::core::hash::Hash for VirtualNodeId {
+        impl ::core::hash::Hash for IrNodeKey {
             #[inline]
             fn hash<__H: ::core::hash::Hasher>(&self, state: &mut __H) {
                 ::core::hash::Hash::hash(&self.0, state)
             }
         }
-        impl fmt::Display for VirtualNodeId {
+        impl fmt::Display for IrNodeKey {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 self.0.fmt(f)
             }
         }
-        pub type VirtualNodeMap = Arc<VirtualRefCacheMap>;
+        pub type IrArena = Arc<VirtualRefCacheMap>;
         pub type VirtualNodeRef = Arc<RwLock<VirtualNode>>;
         /// Maps between node IDs and the nodes that the IDs refer to.
         ///
@@ -35709,7 +35709,7 @@ pub mod node {
             next_id: AtomicUsize,
             /// Nodes are stored in refcells to enable interior mutability.
             /// This ensures that nodes can be inserted into the cache while other nodes are being used.
-            refs: DashMap<VirtualNodeId, VirtualNodeRef>,
+            refs: DashMap<IrNodeKey, VirtualNodeRef>,
         }
         impl VirtualRefCacheMap {
             pub fn new() -> VirtualRefCacheMap {
@@ -35718,17 +35718,17 @@ pub mod node {
                     refs: DashMap::new(),
                 }
             }
-            pub fn next_id(&self) -> VirtualNodeId {
+            pub fn next_id(&self) -> IrNodeKey {
                 let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-                VirtualNodeId(NonZeroUsize::new(id).unwrap())
+                IrNodeKey(NonZeroUsize::new(id).unwrap())
             }
             /// Returns the node with the given ID.
             ///
             /// If the node does not exist (or became stale), `None` is returned.
-            pub fn get(&self, id: VirtualNodeId) -> Option<VirtualNodeRef> {
+            pub fn get(&self, id: IrNodeKey) -> Option<VirtualNodeRef> {
                 self.refs.get(&id).map(|node| Arc::clone(&node))
             }
-            pub fn insert(&self, id: VirtualNodeId, node: VirtualNode) {
+            pub fn insert(&self, id: IrNodeKey, node: VirtualNode) {
                 self.refs.insert(id, Arc::new(RwLock::new(node)));
             }
         }
@@ -35737,7 +35737,7 @@ pub mod node {
         use std::rc::Rc;
         use std::sync::Arc;
         use crate::error::{SlipstreamResult, UnsupportedError};
-        use crate::node::refs::{VirtualNodeId, VirtualNodeMap};
+        use crate::node::arena::{IrNodeKey, IrArena};
         use crate::{
             format::{arc, yaz0::{self, YAZ0_MAGIC}},
             shared::util::RefCursor,
@@ -35747,13 +35747,13 @@ pub mod node {
         /// After decompressing, this forwards the call to [`deserialize_unknown_root`]
         pub fn deserialize_maybe_compressed(
             mut reader: RefCursor<[u8]>,
-            node_map: &VirtualNodeMap,
+            arena: &IrArena,
             name: String,
-        ) -> SlipstreamResult<VirtualNodeId> {
+        ) -> SlipstreamResult<IrNodeKey> {
             if &reader.as_remaining()[..4] == YAZ0_MAGIC {
                 reader = RefCursor::new(Arc::from(yaz0::decompress(&mut reader)?));
             }
-            deserialize_unknown_root(&mut reader, node_map, name)
+            deserialize_unknown_root(&mut reader, arena, name)
         }
         /// Deserializes an uncompressed file.
         ///
@@ -35762,16 +35762,16 @@ pub mod node {
         /// This function works with OS level files, not files within archives.
         pub fn deserialize_unknown_root(
             reader: &mut RefCursor<[u8]>,
-            node_map: &VirtualNodeMap,
+            arena: &IrArena,
             name: String,
-        ) -> SlipstreamResult<VirtualNodeId> {
+        ) -> SlipstreamResult<IrNodeKey> {
             let magic: &[u8; 4] = reader
                 .as_remaining()[..4]
                 .try_into()
                 .expect("array of size 4 does not have size 4?");
             let contents = match magic {
                 &arc::ARC_MAGIC => {
-                    arc::deserialize_virtual(reader, None, node_map, name)?
+                    arc::deserialize_virtual(reader, None, arena, name)?
                 }
                 _ => {
                     return Err(
@@ -36515,7 +36515,7 @@ pub mod panes {
         hash::{DefaultHasher, Hash, Hasher},
         sync::mpsc,
     };
-    use crate::node::refs::VirtualNodeId;
+    use crate::node::arena::IrNodeKey;
     pub mod inspector {
         pub mod mdl0 {
             pub mod bones {
@@ -37009,7 +37009,7 @@ pub mod panes {
             }
         }
         pub mod widgets {
-            use crate::node::refs::VirtualNodeId;
+            use crate::node::arena::IrNodeKey;
             pub enum DraggableNodeKind {
                 Directory,
                 Bone,
@@ -37058,7 +37058,7 @@ pub mod panes {
                 fn assert_fields_are_eq(&self) {}
             }
             pub struct DraggableNodePayload {
-                pub id: VirtualNodeId,
+                pub id: IrNodeKey,
                 pub kind: DraggableNodeKind,
             }
             #[automatically_derived]
@@ -37077,14 +37077,14 @@ pub mod panes {
             }
             pub fn draw_node_reference(
                 id: egui::Id,
-                node: Option<VirtualNodeId>,
+                node: Option<IrNodeKey>,
                 ui: &mut egui::Ui,
             ) {
                 let frame = egui::Frame::default().inner_margin(4.0);
                 let (_response, payload) = ui
                     .dnd_drop_zone::<
-                        VirtualNodeId,
-                        Option<VirtualNodeId>,
+                        IrNodeKey,
+                        Option<IrNodeKey>,
                     >(
                         frame,
                         |ui| {
@@ -37103,7 +37103,7 @@ pub mod panes {
                                     )
                                     .response;
                                 if let Some(hovered) = response
-                                    .dnd_hover_payload::<VirtualNodeId>()
+                                    .dnd_hover_payload::<IrNodeKey>()
                                 {
                                     {
                                         use ::tracing::__macro_support::Callsite as _;
@@ -37165,7 +37165,7 @@ pub mod panes {
                                     };
                                 }
                                 if let Some(payload) = response
-                                    .dnd_release_payload::<VirtualNodeId>()
+                                    .dnd_release_payload::<IrNodeKey>()
                                 {
                                     {
                                         use ::tracing::__macro_support::Callsite as _;
@@ -37397,28 +37397,28 @@ pub mod panes {
         }
         use std::sync::mpsc;
         use crate::{
-            node::refs::{VirtualNodeId, VirtualNodeMap},
+            node::arena::{IrNodeKey, IrArena},
             panes::{ContentSignature, Pane, PaneAction},
             reg_icon,
         };
         pub struct InspectorPane {
             cmd_sender: mpsc::Sender<PaneAction>,
             content_sig: ContentSignature,
-            node_map: VirtualNodeMap,
-            node: VirtualNodeId,
+            arena: IrArena,
+            node: IrNodeKey,
         }
         impl InspectorPane {
             pub fn new(
                 cmd_sender: mpsc::Sender<PaneAction>,
                 content_sig: ContentSignature,
-                node: VirtualNodeId,
-                node_map: VirtualNodeMap,
+                node: IrNodeKey,
+                arena: IrArena,
             ) -> Box<dyn Pane> {
                 Box::new(Self {
                     cmd_sender,
                     content_sig,
                     node,
-                    node_map,
+                    arena,
                 })
             }
         }
@@ -37435,7 +37435,7 @@ pub mod panes {
                 tile_id: egui_tiles::TileId,
             ) -> egui_tiles::UiResponse {
                 let drag_started = ui.heading("Inspector").drag_started();
-                let open_node = self.node_map.get(self.node).unwrap();
+                let open_node = self.arena.get(self.node).unwrap();
                 let mut node_ref = open_node.write();
                 egui::ScrollArea::vertical()
                     .show(
@@ -37542,8 +37542,8 @@ pub mod panes {
         use crate::{
             error::{SlipstreamError, SlipstreamResult, InvalidInputError},
             node::{
-                defer::Deferred, node::VirtualNodeKind,
-                refs::{VirtualNodeId, VirtualNodeMap},
+                defer::Deferred, node::IrNodeType,
+                refs::{IrNodeKey, IrArena},
             },
             panes::{
                 ContentSignature, Pane, PaneAction, RequestNewPane,
@@ -37553,21 +37553,21 @@ pub mod panes {
         pub struct OutlinerPane {
             cmd_sender: mpsc::Sender<PaneAction>,
             content_sig: ContentSignature,
-            root: VirtualNodeId,
-            node_map: VirtualNodeMap,
+            root: IrNodeKey,
+            arena: IrArena,
         }
         impl OutlinerPane {
             pub fn new(
                 cmd_sender: mpsc::Sender<PaneAction>,
                 content_sig: ContentSignature,
-                root: VirtualNodeId,
-                node_map: VirtualNodeMap,
+                root: IrNodeKey,
+                arena: IrArena,
             ) -> Box<dyn Pane> {
                 Box::new(Self {
                     cmd_sender,
                     content_sig,
                     root,
-                    node_map,
+                    arena,
                 })
             }
             /// Draws the file tree under the current node.
@@ -37577,11 +37577,11 @@ pub mod panes {
             /// If a specific node has been opened, this function returns the ID of its cache entry.
             fn draw_file_tree(
                 &mut self,
-                root_node: VirtualNodeId,
+                root_node: IrNodeKey,
                 ui: &mut egui::Ui,
             ) -> SlipstreamResult<()> {
                 let curr_node_lock = self
-                    .node_map
+                    .arena
                     .get(root_node)
                     .ok_or_else(|| {
                         SlipstreamError::from(InvalidInputError {
@@ -37753,7 +37753,7 @@ pub mod panes {
         fn draw_outliner_node_icon(
             ui: &mut egui::Ui,
             openness: f32,
-            node_kind: VirtualNodeKind,
+            node_kind: IrNodeType,
             response: &egui::Response,
         ) {
             let icon = if openness < 0.5 {
@@ -38381,8 +38381,8 @@ pub mod panes {
                     vertices::{VertexBuf, VertexPositionType},
                 },
                 node::{
-                    node::{VirtualNodeBody, VirtualNodeKind},
-                    refs::{VirtualNodeId, VirtualNodeMap},
+                    node::{VirtualNodeBody, IrNodeType},
+                    refs::{IrNodeKey, IrArena},
                 },
             };
             #[repr(C)]
@@ -38498,8 +38498,8 @@ pub mod panes {
                 fn assemble_buffer(
                     &mut self,
                     device: &wgpu::Device,
-                    node_id: VirtualNodeId,
-                    node_map: &VirtualNodeMap,
+                    node_id: IrNodeKey,
+                    arena: &IrArena,
                 ) -> SlipstreamResult<()> {
                     {}
                     #[allow(clippy::suspicious_else_formatting)]
@@ -38600,7 +38600,7 @@ pub mod panes {
                                 return __tracing_attr_fake_return;
                             }
                             {
-                                let node = node_map
+                                let node = arena
                                     .get(node_id)
                                     .ok_or_else(|| {
                                         SlipstreamError::from(InvalidInputError {
@@ -38796,8 +38796,8 @@ pub mod panes {
                 }
                 pub fn from_node(
                     device: &wgpu::Device,
-                    node_id: VirtualNodeId,
-                    node_map: &VirtualNodeMap,
+                    node_id: IrNodeKey,
+                    arena: &IrArena,
                 ) -> SlipstreamResult<Self> {
                     {}
                     #[allow(clippy::suspicious_else_formatting)]
@@ -38899,7 +38899,7 @@ pub mod panes {
                             }
                             {
                                 let mut model = Self::default();
-                                let root = node_map
+                                let root = arena
                                     .get(node_id)
                                     .ok_or_else(|| {
                                         SlipstreamError::from(InvalidInputError {
@@ -38908,7 +38908,7 @@ pub mod panes {
                                         })
                                     })?;
                                 let root_lock = root.read();
-                                if root_lock.kind != VirtualNodeKind::Mdl0Root {
+                                if root_lock.kind != IrNodeType::Mdl0Root {
                                     return Err(
                                         InvalidInputError {
                                             reason: ::alloc::__export::must_use({
@@ -38929,7 +38929,7 @@ pub mod panes {
                                     .get()
                                     .expect("MDL0 root was deferred");
                                 for &subdir in &root_body.children {
-                                    let Some(subdir_node) = node_map.get(subdir) else {
+                                    let Some(subdir_node) = arena.get(subdir) else {
                                         return Err(
                                             InvalidInputError {
                                                 reason: ::alloc::__export::must_use({
@@ -39011,7 +39011,7 @@ pub mod panes {
                                         .get()
                                         .expect("MDL0 subdirectory node was deferred");
                                     for &child in &subdir_body.children {
-                                        model.assemble_buffer(device, child, node_map)?;
+                                        model.assemble_buffer(device, child, arena)?;
                                     }
                                 }
                                 match &model {
@@ -39112,7 +39112,7 @@ pub mod panes {
         use egui::mutex::RwLock;
         use wgpu::util::DeviceExt;
         use crate::{
-            error::SlipstreamResult, node::refs::{VirtualNodeId, VirtualNodeMap},
+            error::SlipstreamResult, node::arena::{IrNodeKey, IrArena},
             panes::{
                 ContentSignature, Pane, PaneAction,
                 viewer::{
@@ -39130,8 +39130,8 @@ pub mod panes {
         pub struct ViewerPane {
             cmd_sender: mpsc::Sender<PaneAction>,
             content_sig: ContentSignature,
-            node: Option<VirtualNodeId>,
-            node_map: VirtualNodeMap,
+            node: Option<IrNodeKey>,
+            arena: IrArena,
             render_state: GraphicsState,
         }
         impl ViewerPane {
@@ -39139,15 +39139,15 @@ pub mod panes {
             pub fn new(
                 cmd_sender: mpsc::Sender<PaneAction>,
                 content_sig: ContentSignature,
-                mdl0_node: Option<VirtualNodeId>,
-                node_map: VirtualNodeMap,
+                mdl0_node: Option<IrNodeKey>,
+                arena: IrArena,
                 render_state: GraphicsState,
             ) -> SlipstreamResult<Box<dyn Pane>> {
                 let model = mdl0_node
                     .map(|node| TranslatedModel::from_node(
                         &render_state.device,
                         node,
-                        &node_map,
+                        &arena,
                     ))
                     .transpose()?;
                 match &model {
@@ -39232,7 +39232,7 @@ pub mod panes {
                         cmd_sender,
                         content_sig,
                         node: mdl0_node,
-                        node_map,
+                        arena,
                         render_state,
                     }),
                 )
@@ -39411,9 +39411,9 @@ pub mod panes {
         }
     }
     pub enum RequestNewPane {
-        Outliner { root: VirtualNodeId },
-        Inspector { inspected: VirtualNodeId },
-        Viewer { viewed: Option<VirtualNodeId> },
+        Outliner { root: IrNodeKey },
+        Inspector { inspected: IrNodeKey },
+        Viewer { viewed: Option<IrNodeKey> },
         Log,
     }
     #[automatically_derived]
@@ -39505,8 +39505,8 @@ pub mod panes {
         #[doc(hidden)]
         #[coverage(off)]
         fn assert_fields_are_eq(&self) {
-            let _: ::core::cmp::AssertParamIsEq<VirtualNodeId>;
-            let _: ::core::cmp::AssertParamIsEq<Option<VirtualNodeId>>;
+            let _: ::core::cmp::AssertParamIsEq<IrNodeKey>;
+            let _: ::core::cmp::AssertParamIsEq<Option<IrNodeKey>>;
         }
     }
     impl RequestNewPane {
@@ -39534,7 +39534,7 @@ pub mod panes {
     }
     pub struct RequestPaneEdit {
         pub tile_id: egui_tiles::TileId,
-        pub new_node: VirtualNodeId,
+        pub new_node: IrNodeKey,
     }
     #[automatically_derived]
     impl ::core::fmt::Debug for RequestPaneEdit {
@@ -39576,7 +39576,7 @@ pub mod panes {
         #[coverage(off)]
         fn assert_fields_are_eq(&self) {
             let _: ::core::cmp::AssertParamIsEq<egui_tiles::TileId>;
-            let _: ::core::cmp::AssertParamIsEq<VirtualNodeId>;
+            let _: ::core::cmp::AssertParamIsEq<IrNodeKey>;
         }
     }
     pub enum PaneAction {

@@ -108,8 +108,8 @@ impl IndexGroup {
     }
 
     /// Obtains a pointer to the start of the data section of the given entry.
-    pub fn get_entry_data_start(&self, entry: &IndexGroupEntry) -> u32 {
-        self.group_start + entry.data_pointer
+    pub fn get_entry_data_start(&self, entry: &IndexGroupEntry) -> u64 {
+        (self.group_start + entry.data_pointer) as u64
     }
 
     pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {

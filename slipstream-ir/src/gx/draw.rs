@@ -4,7 +4,7 @@ use slipstream_shared::{cursor::RefCursor, error::SlipstreamResult};
 use crate::{
     encoding::ReadArrayExt,
     gx::load_cp::VectorStorage,
-    mdl0::{colors::deserialize_color, shapes::GxVertexDeclaration},
+    mdl0::{colors::deserialize_color, polygon::GxVertexDeclaration},
     util::{VectorDivisor, VertexFormat, deserialize_scalar, deserialize_vector},
 };
 
@@ -325,7 +325,6 @@ impl OpVertex {
             .then(&mut byte_read)
             .transpose()?
             .map(|x| x / 3);
-        dbg!(&pn_matrix_index);
 
         let tms = [
             decl.vcd_lo.tm0().then(&mut byte_read).transpose()?,

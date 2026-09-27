@@ -4,7 +4,7 @@ use std::{path::PathBuf, sync::Arc};
 use crate::cmd::AppCommandChannel;
 use crate::decorations::{self, WindowState};
 use crate::error::{InvalidInputError, SlipstreamError, SlipstreamResult};
-use crate::node::refs::{VirtualNodeId, VirtualNodeMap, VirtualRefCacheMap};
+use crate::node::arena::{IrArena, IrNodeKey, VirtualRefCacheMap};
 use crate::node::root::{self};
 use crate::pages::RoutablePage;
 use crate::pages::intro::IntroPage;
@@ -18,7 +18,7 @@ use crate::shared::util::RefCursor;
 
 pub struct Properties {
     pub label: String,
-    pub node_id: VirtualNodeId,
+    pub node_id: IrNodeKey,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,8 +60,8 @@ pub struct Editor {
     /// Not an internal URI.
     pub file_info: OpenedFileInfo,
     /// The root node of the file.
-    pub file_base_node: VirtualNodeId,
-    pub node_map: VirtualNodeMap,
+    pub file_base_node: IrNodeKey,
+    pub arena: IrArena,
 
     pub pane_behavior: PaneBehavior,
     pub pane_tree: egui_tiles::Tree<Box<dyn Pane>>,
@@ -76,12 +76,9 @@ impl Editor {
         let contents = file_info.content();
         let cursor = RefCursor::new(Arc::<[u8]>::from(contents));
 
-        let node_map = Arc::new(VirtualRefCacheMap::new());
-        let root_node = root::deserialize_maybe_compressed(
-            cursor,
-            &node_map,
-            file_info.file_name().to_owned(),
-        )?;
+        let arena = Arc::new(VirtualRefCacheMap::new());
+        let root_node =
+            root::deserialize_maybe_compressed(cursor, &arena, file_info.file_name().to_owned())?;
 
         let mut tiles = egui_tiles::Tiles::default();
 
@@ -91,15 +88,14 @@ impl Editor {
         let container_id = tiles.insert_container(container);
 
         let outliner_sig = RequestNewPane::Outliner { root: root_node }.content_signature();
-        let outliner =
-            OutlinerPane::new(tx.clone(), outliner_sig, root_node, Arc::clone(&node_map));
+        let outliner = OutlinerPane::new(tx.clone(), outliner_sig, root_node, Arc::clone(&arena));
 
         let viewer_sig = RequestNewPane::Viewer { viewed: None }.content_signature();
         let viewer = ViewerPane::new(
             tx.clone(),
             viewer_sig,
             None,
-            Arc::clone(&node_map),
+            Arc::clone(&arena),
             render_state.clone(),
         );
 
@@ -127,7 +123,7 @@ impl Editor {
             cmd: cmd_channel,
             render_state: render_state.clone(),
 
-            node_map,
+            arena,
             file_info,
             file_base_node: root_node,
 
@@ -188,19 +184,19 @@ impl Editor {
                 self.pane_behavior.sender.clone(),
                 content_sig,
                 root,
-                self.node_map.clone(),
+                self.arena.clone(),
             ),
             RequestNewPane::Inspector { inspected } => InspectorPane::new(
                 self.pane_behavior.sender.clone(),
                 content_sig,
                 inspected,
-                self.node_map.clone(),
+                self.arena.clone(),
             ),
             RequestNewPane::Viewer { viewed } => ViewerPane::new(
                 self.pane_behavior.sender.clone(),
                 content_sig,
                 viewed,
-                self.node_map.clone(),
+                self.arena.clone(),
                 self.render_state.clone(),
             )?,
             RequestNewPane::Log => LogPane::new(),

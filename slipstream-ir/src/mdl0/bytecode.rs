@@ -3,9 +3,10 @@ use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::{CorruptionError, SlipstreamResult};
 
 use crate::index::IndexGroup;
+use crate::node::arena::{IrArena, IrNodeKey, VirtualNodeRef};
 use crate::node::defer::Deferred;
-use crate::node::node::{VirtualNode, VirtualNodeBody, VirtualNodeKind};
-use crate::node::refs::{VirtualNodeId, VirtualNodeMap, VirtualNodeRef};
+use crate::node::node::{IrNode, IrNodeType, VirtualNodeBody};
+use crate::visitor::{Visitable, Visitor};
 
 /// The opcode IDs for the possible commands in the definitions section of an MDL0 file.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, strum::FromRepr)]
@@ -145,11 +146,11 @@ pub enum BytecodeCommand {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Bytecode {
+pub struct Definitions {
     pub commands: Vec<BytecodeCommand>,
 }
 
-impl Bytecode {
+impl Definitions {
     pub fn read_opcode_id(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<DefinitionOpCodeId> {
         let byte = reader.read_u8()?;
         dbg!(byte);
@@ -164,7 +165,7 @@ impl Bytecode {
     }
 }
 
-impl Bytecode {
+impl Definitions {
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let mut commands = Vec::new();
 
@@ -200,11 +201,17 @@ impl Bytecode {
     }
 }
 
+impl Visitable for Definitions {
+    fn accept(&self, visitor: &mut dyn Visitor) {
+        visitor.visit_definitions(self)
+    }
+}
+
 #[tracing::instrument(skip_all, fields(parent_id))]
 pub fn deserialize_virtual(
     reader: &mut RefCursor<[u8]>,
-    parent_id: VirtualNodeId,
-    node_map: &VirtualNodeMap,
+    parent_id: IrNodeKey,
+    arena: &IrArena,
 ) -> SlipstreamResult<VirtualNodeBody> {
     let section_index = IndexGroup::deserialize(reader)?;
 
@@ -214,13 +221,13 @@ pub fn deserialize_virtual(
         let data_start = section_index.get_entry_data_start(entry);
 
         reader.set_position(data_start as u64);
-        let draw_list = Bytecode::deserialize(reader)?;
+        let draw_list = Definitions::deserialize(reader)?;
 
-        let id = node_map.next_id();
-        let node = VirtualNode {
+        let id = arena.next_id();
+        let node = IrNode {
             label: name,
-            id,
-            kind: VirtualNodeKind::Bytecode,
+            key,
+            ty: IrNodeType::Bytecode,
             parent: Some(parent_id),
             body: Deferred::evaluated(VirtualNodeBody {
                 children: Vec::new(),
@@ -228,7 +235,7 @@ pub fn deserialize_virtual(
             }),
         };
 
-        node_map.insert(id, node);
+        arena.insert(id, node);
         children.push(id);
     }
 

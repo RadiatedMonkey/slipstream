@@ -6,9 +6,9 @@ use slipstream_shared::error::{
 
 use crate::brres::{self, BRRES_MAGIC};
 use crate::encoding::{ReadArrayExt, ReadStringExt};
+use crate::node::arena::{IrArena, IrNodeKey};
 use crate::node::defer::Deferred;
-use crate::node::node::{VirtualNode, VirtualNodeBody, VirtualNodeKind};
-use crate::node::refs::{VirtualNodeId, VirtualNodeMap};
+use crate::node::node::{IrNode, IrNodeType, VirtualNodeBody};
 
 /// Magic of an ARC file.
 pub const ARC_MAGIC: [u8; 4] = [0x55, 0xAA, 0x38, 0x2D];
@@ -145,22 +145,22 @@ impl Node {
 
 fn parse_leaf_node(
     reader: &mut RefCursor<[u8]>,
-    parent_id: VirtualNodeId,
-    node_map: &VirtualNodeMap,
+    parent_id: IrNodeKey,
+    arena: &IrArena,
     name: String,
-) -> SlipstreamResult<VirtualNodeId> {
+) -> SlipstreamResult<IrNodeKey> {
     let magic: [u8; 4] = reader.read_u8_array()?;
     reader.set_position(reader.position() - 4);
 
     match magic {
-        ARC_MAGIC => deserialize_virtual(reader, Some(parent_id), node_map, name),
-        BRRES_MAGIC => brres::deserialize_virtual(reader, Some(parent_id), node_map, name),
+        ARC_MAGIC => deserialize_virtual(reader, Some(parent_id), arena, name),
+        BRRES_MAGIC => brres::deserialize_virtual(reader, Some(parent_id), arena, name),
         _ => {
-            let id = node_map.next_id();
-            let node = VirtualNode {
+            let id = arena.next_id();
+            let node = IrNode {
                 label: name,
-                id,
-                kind: VirtualNodeKind::Unknown,
+                key: id,
+                ty: IrNodeType::Unknown,
                 parent: Some(parent_id),
                 body: Deferred::evaluated(VirtualNodeBody {
                     children: Vec::new(),
@@ -170,7 +170,7 @@ fn parse_leaf_node(
                 }),
             };
 
-            node_map.insert(id, node);
+            arena.insert(id, node);
             Ok(id)
         }
     }
@@ -178,11 +178,11 @@ fn parse_leaf_node(
 
 fn parse_directory_tree(
     node_list: &mut [Node],
-    parent_id: Option<VirtualNodeId>,
-    node_map: &VirtualNodeMap,
+    parent_id: Option<IrNodeKey>,
+    arena: &IrArena,
     label: String,
     cursor: &mut usize,
-) -> SlipstreamResult<VirtualNodeId> {
+) -> SlipstreamResult<IrNodeKey> {
     let &NodeContent::Directory { skip_node, .. } = &node_list[*cursor].data else {
         return Err(CorruptionError {
             reason: "expected directory at root, found file instead".to_owned(),
@@ -193,7 +193,7 @@ fn parse_directory_tree(
 
     *cursor += 1;
 
-    let id = node_map.next_id();
+    let id = arena.next_id();
 
     let mut children = Vec::new();
     while *cursor < skip_node as usize && *cursor < node_list.len() {
@@ -202,11 +202,11 @@ fn parse_directory_tree(
         let name = std::mem::take(&mut curr_node.name);
         match &mut curr_node.data {
             NodeContent::Directory { .. } => {
-                let child = parse_directory_tree(node_list, Some(id), node_map, name, cursor)?;
+                let child = parse_directory_tree(node_list, Some(id), arena, name, cursor)?;
                 children.push(child);
             }
             NodeContent::File { data } => {
-                let sections = parse_leaf_node(data, id, node_map, name)?;
+                let sections = parse_leaf_node(data, id, arena, name)?;
                 children.push(sections);
 
                 *cursor += 1;
@@ -214,11 +214,11 @@ fn parse_directory_tree(
         }
     }
 
-    let node = VirtualNode {
+    let node = IrNode {
         label,
-        id,
+        key: id,
         parent: parent_id,
-        kind: VirtualNodeKind::ArcDirectory {
+        ty: IrNodeType::ArcDirectory {
             empty: children.is_empty(),
         },
         body: Deferred::evaluated(VirtualNodeBody {
@@ -227,16 +227,16 @@ fn parse_directory_tree(
         }),
     };
 
-    node_map.insert(id, node);
+    arena.insert(id, node);
     Ok(id)
 }
 
 pub fn deserialize_virtual(
     reader: &mut RefCursor<[u8]>,
-    parent_id: Option<VirtualNodeId>,
-    node_map: &VirtualNodeMap,
+    parent_id: Option<IrNodeKey>,
+    arena: &IrArena,
     name: String,
-) -> SlipstreamResult<VirtualNodeId> {
+) -> SlipstreamResult<IrNodeKey> {
     tracing::trace!("Parsing ARC file `{name}`");
 
     let header = Header::deserialize(reader)?;
@@ -285,7 +285,7 @@ pub fn deserialize_virtual(
     let mut cursor = 0;
 
     tracing::trace!("Constructing directory tree and parsing nodes...");
-    let ret = parse_directory_tree(&mut nodes, parent_id, node_map, name, &mut cursor)?;
+    let ret = parse_directory_tree(&mut nodes, parent_id, arena, name, &mut cursor)?;
     tracing::trace!("Constructed directory tree successfully");
     Ok(ret)
 }

@@ -4,7 +4,7 @@ use crate::{
         shapes::Shape,
         vertices::VertexBuf,
     },
-    node::refs::{VirtualNodeId, VirtualNodeMap},
+    node::arena::{IrArena, IrNodeKey},
 };
 
 // pub struct ModelDescriptor<'a> {
@@ -16,7 +16,7 @@ use crate::{
 // pub fn build_model<'a>(
 //     desc: ModelDescriptor<'a>,
 //     encoder: &mut wgpu::CommandEncoder,
-//     node_map: &VirtualNodeMap,
+//     arena: &IrArena,
 // ) {
 //     for cmd in &desc.bytecode.commands {
 //         match cmd {

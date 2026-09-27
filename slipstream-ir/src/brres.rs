@@ -9,9 +9,9 @@ use crate::chr0::Chr0Subfile;
 use crate::encoding::ReadArrayExt;
 use crate::index::IndexGroup;
 use crate::mdl0::{self, MDL0_MAGIC};
+use crate::node::arena::{IrArena, IrNodeKey};
 use crate::node::defer::Deferred;
-use crate::node::node::{VirtualNode, VirtualNodeBody, VirtualNodeKind};
-use crate::node::refs::{VirtualNodeId, VirtualNodeMap};
+use crate::node::node::{IrNode, IrNodeType, VirtualNodeBody};
 
 pub const BRRES_MAGIC: [u8; 4] = [0x62, 0x72, 0x65, 0x73];
 const LE_BOM: [u8; 2] = [0xFF, 0xFE];
@@ -237,23 +237,23 @@ pub enum BFileType {
 
 fn deserialize_subfile(
     reader: &mut RefCursor<[u8]>,
-    parent_id: VirtualNodeId,
-    node_map: &VirtualNodeMap,
+    parent_id: IrNodeKey,
+    arena: &IrArena,
     name: String,
-) -> SlipstreamResult<VirtualNodeId> {
+) -> SlipstreamResult<IrNodeKey> {
     // Check magic
     let magic = reader.read_u8_array::<4>()?;
 
     match magic {
-        MDL0_MAGIC => mdl0::deserialize_virtual(reader, parent_id, node_map, name),
+        MDL0_MAGIC => mdl0::deserialize_virtual(reader, parent_id, arena, name),
         // Chr0Subfile::MAGIC => Chr0Subfile::deserialize_lazy(reader),
         _ => {
-            let id = node_map.next_id();
-            let node = VirtualNode::from(VirtualNode {
+            let id = arena.next_id();
+            let node = IrNode::from(IrNode {
                 label: String::from("TODO, UNPARSED FORMAT"),
-                id,
+                key: id,
                 parent: Some(parent_id),
-                kind: VirtualNodeKind::Unknown,
+                ty: IrNodeType::Unknown,
                 body: Deferred::evaluated(VirtualNodeBody {
                     children: Vec::new(),
                     inspectable: Some(Box::new(Raw {
@@ -262,7 +262,7 @@ fn deserialize_subfile(
                 }),
             });
 
-            node_map.insert(id, node);
+            arena.insert(id, node);
             Ok(id)
         }
     }
@@ -270,14 +270,14 @@ fn deserialize_subfile(
 
 pub fn deserialize_virtual(
     reader: &mut RefCursor<[u8]>,
-    parent_id: Option<VirtualNodeId>,
-    node_map: &VirtualNodeMap,
+    parent_id: Option<IrNodeKey>,
+    arena: &IrArena,
     name: String,
-) -> SlipstreamResult<VirtualNodeId> {
+) -> SlipstreamResult<IrNodeKey> {
     let mut reader = reader.clone();
-    let brres_id = node_map.next_id();
+    let brres_id = arena.next_id();
 
-    let node_map2 = node_map.clone();
+    let arena2 = arena.clone();
 
     let name2 = name.clone();
     let parse_brres = move |_data| {
@@ -296,7 +296,7 @@ pub fn deserialize_virtual(
         // Do not include root subfile.
         for dir in &root_index.entries[1..] {
             let dir_name = root_index.get_entry_name(&mut reader, dir)?.to_owned();
-            let dir_id = node_map2.next_id();
+            let dir_id = arena2.next_id();
 
             tracing::trace!(
                 "Discovered folder `{dir_name}` at location {}",
@@ -321,7 +321,7 @@ pub fn deserialize_virtual(
 
                 // Skip over unimplemented formats for testing for now
                 {
-                    let magic = &reader.as_remaining()[..4];
+                    let magic = &reader.remaining()[..4];
                     if magic != MDL0_MAGIC && magic != Chr0Subfile::MAGIC {
                         tracing::error!("SKIPPING {}", String::from_utf8_lossy(magic));
                         continue;
@@ -329,25 +329,23 @@ pub fn deserialize_virtual(
                 }
 
                 let file = tracing::trace_span!("deserialize_subfile", %dir_name, %subfile_name)
-                    .in_scope(|| {
-                        deserialize_subfile(&mut reader, dir_id, &node_map2, subfile_name)
-                    })?;
+                    .in_scope(|| deserialize_subfile(&mut reader, dir_id, &arena2, subfile_name))?;
 
                 subfiles.push(file);
             }
 
-            let node = VirtualNode::from(VirtualNode {
+            let node = IrNode::from(IrNode {
                 label: dir_name,
-                id: dir_id,
+                key: dir_id,
                 parent: Some(brres_id),
-                kind: VirtualNodeKind::BrresDirectory,
+                ty: IrNodeType::BrresDirectory,
                 body: Deferred::evaluated(VirtualNodeBody {
                     children: subfiles,
                     inspectable: None,
                 }),
             });
 
-            node_map2.insert(dir_id, node);
+            arena2.insert(dir_id, node);
             directories.push(dir_id);
         }
 
@@ -357,14 +355,14 @@ pub fn deserialize_virtual(
         })
     };
 
-    let node = VirtualNode::from(VirtualNode {
+    let node = IrNode::from(IrNode {
         label: name,
-        id: brres_id,
+        key: brres_id,
         parent: parent_id,
-        kind: VirtualNodeKind::BrresDirectory,
+        ty: IrNodeType::BrresDirectory,
         body: Deferred::defer((), parse_brres)?,
     });
 
-    node_map.insert(brres_id, node);
+    arena.insert(brres_id, node);
     Ok(brres_id)
 }

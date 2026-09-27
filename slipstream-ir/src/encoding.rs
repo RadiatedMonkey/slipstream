@@ -122,7 +122,7 @@ impl ReadStringExt for RefCursor<[u8]> {
     }
 
     fn read_null_string<B: byteorder::ByteOrder>(&mut self) -> SlipstreamResult<String> {
-        let rem = self.as_remaining();
+        let rem = self.remaining();
         let null_pos = rem.iter().position(|&c| c == 0).ok_or_else(|| {
             SlipstreamError::from(CorruptionError {
                 reason: "did not find string null terminator before EOF".to_owned(),

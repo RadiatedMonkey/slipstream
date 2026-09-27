@@ -1,5 +1,5 @@
 use crate::format::mdl0::bones::{BillboardSetting, BoneFlags, VirtualBone};
-use crate::node::node::{Inspectable, VirtualNodeKind};
+use crate::node::node::{Inspectable, IrNodeType};
 use crate::panes::inspector::widgets::{
     draw_inspector_section_header, draw_node_reference, draw_vec_drag_values,
     draw_vec_drag_values_suffixed,

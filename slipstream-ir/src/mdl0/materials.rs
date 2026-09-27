@@ -8,13 +8,15 @@ use slipstream_shared::{
 
 use crate::{
     encoding::ReadArrayExt,
-    gx::load_bp::LoadBpOpCode,
+    gx::load_bp::{AlphaFunction, BlendMode, ConstantAlpha, DepthTest, LoadBpOpCode},
+    index::IndexGroup,
     mdl0::TextureMatrixMode,
     node::{
+        arena::{IrArena, IrNodeKey},
         defer::Deferred,
-        node::{VirtualNode, VirtualNodeBody, VirtualNodeKind},
-        refs::{VirtualNodeId, VirtualNodeMap},
+        node::{IrNodeType, VirtualNode, VirtualNodeBody},
     },
+    visitor::{Visitable, Visitor},
 };
 
 #[bitfield(u32)]
@@ -578,7 +580,7 @@ impl TextureReference {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct MaterialBuf {
+pub struct MaterialBuffer {
     pub index: u32,
     pub flags: MaterialFlags,
     pub texture_gen_count: u8,
@@ -609,7 +611,7 @@ pub struct MaterialBuf {
     pub texture_references: Vec<TextureReference>,
 }
 
-impl MaterialBuf {
+impl MaterialBuffer {
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let material_start = reader.position();
         let _length = reader.read_u32::<BigEndian>()?;
@@ -725,12 +727,18 @@ impl MaterialBuf {
     }
 }
 
+impl Visitable for MaterialBuffer {
+    fn accept(&self, visitor: &mut dyn Visitor) {
+        visitor.visit_material(self)
+    }
+}
+
 #[tracing::instrument(skip_all, fields(parent_id))]
 pub fn deserialize_virtual(
     reader: &mut RefCursor<[u8]>,
     header_start: u32,
-    parent_id: VirtualNodeId,
-    node_map: &VirtualNodeMap,
+    parent_id: IrNodeKey,
+    arena: &IrArena,
 ) -> SlipstreamResult<VirtualNodeBody> {
     let section_index = IndexGroup::deserialize(reader)?;
 
@@ -741,20 +749,20 @@ pub fn deserialize_virtual(
 
         reader.set_position(data_start as u64);
 
-        let material = MaterialBuf::deserialize(reader)?;
-        let id = node_map.next_id();
+        let material = MaterialBuffer::deserialize(reader)?;
+        let id = arena.next_id();
         let node = VirtualNode {
             label: name,
             id,
             parent: Some(parent_id),
-            kind: VirtualNodeKind::Materials,
+            ty: IrNodeType::Materials,
             body: Deferred::evaluated(VirtualNodeBody {
                 children: Vec::new(),
                 inspectable: Some(Box::new(material)),
             }),
         };
 
-        node_map.insert(id, node);
+        arena.insert(id, node);
         materials.push(id);
     }
 

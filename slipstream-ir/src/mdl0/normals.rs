@@ -4,10 +4,11 @@ use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::{CorruptionError, SlipstreamError, SlipstreamResult};
 
 use crate::index::IndexGroup;
+use crate::node::arena::{IrArena, IrNodeKey};
 use crate::node::defer::Deferred;
-use crate::node::node::{VirtualNode, VirtualNodeBody, VirtualNodeKind};
-use crate::node::refs::{VirtualNodeId, VirtualNodeMap};
+use crate::node::node::{IrNodeType, VirtualNode, VirtualNodeBody};
 use crate::util::{VectorDivisor, VertexFormat, deserialize_vector_data};
+use crate::visitor::{Visitable, Visitor};
 
 const COMPONENTS_NORMAL: u32 = 0x0;
 const COMPONENTS_ALL: u32 = 0x1;
@@ -102,7 +103,7 @@ impl NormalBufData {
 /// The original file might store this data in a lower quality format, but the parser will always convert everything
 /// to floats.
 #[derive(Debug, Clone, PartialEq)]
-pub struct NormalBuf {
+pub struct NormalBuffer {
     /// Index of this buffer into the `Normals` section of the model.
     pub index: u32,
     /// Scalar data type to use for the normal vectors.
@@ -123,7 +124,7 @@ pub struct NormalBuf {
     pub normals: NormalBufData,
 }
 
-impl NormalBuf {
+impl NormalBuffer {
     pub fn get_normal(&self, index: usize) -> Option<[f32; 3]> {
         match &self.normals {
             NormalBufData::Single(x) => x.get(index).copied(),
@@ -185,13 +186,19 @@ impl NormalBuf {
     }
 }
 
+impl Visitable for NormalBuffer {
+    fn accept(&self, visitor: &mut dyn Visitor) {
+        visitor.visit_normals(self)
+    }
+}
+
 /// Deserializes all buffers in the `Normals` section of an MDL0 file.
 #[tracing::instrument(skip_all, fields(parent_id))]
 pub fn deserialize_normals_section(
     reader: &mut RefCursor<[u8]>,
     header_start: u32,
-    parent_id: VirtualNodeId,
-    node_map: &VirtualNodeMap,
+    parent_id: IrNodeKey,
+    arena: &IrArena,
 ) -> SlipstreamResult<VirtualNodeBody> {
     let section_index = IndexGroup::deserialize(reader)?;
 
@@ -202,20 +209,20 @@ pub fn deserialize_normals_section(
 
         reader.set_position(data_start as u64);
 
-        let normals = NormalBuf::deserialize(reader, header_start)?;
+        let normals = NormalBuffer::deserialize(reader, header_start)?;
 
-        let id = node_map.next_id();
+        let id = arena.next_id();
         let node = VirtualNode {
             label: name,
             id,
-            kind: VirtualNodeKind::Normals,
+            kind: IrNodeType::Normals,
             parent: Some(parent_id),
             body: Deferred::evaluated(VirtualNodeBody {
                 children: Vec::new(),
                 inspectable: Some(Box::new(normals)),
             }),
         };
-        node_map.insert(id, node);
+        arena.insert(id, node);
         models.push(id);
     }
 

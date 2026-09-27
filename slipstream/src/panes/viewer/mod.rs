@@ -15,7 +15,7 @@ use crate::error::SlipstreamError;
 use crate::panes::viewer::translator::DrawableModel;
 use crate::{
     error::SlipstreamResult,
-    node::refs::{VirtualNodeId, VirtualNodeMap},
+    node::arena::{IrArena, IrNodeKey},
     panes::{
         ContentSignature, Pane, PaneAction,
         viewer::{
@@ -34,8 +34,8 @@ use crate::{
 pub struct ViewerPane {
     cmd_sender: mpsc::Sender<PaneAction>,
     content_sig: ContentSignature,
-    node: Option<VirtualNodeId>,
-    node_map: VirtualNodeMap,
+    node: Option<IrNodeKey>,
+    arena: IrArena,
 
     model: Option<DrawableModel>,
     render_state: GraphicsState,
@@ -46,12 +46,12 @@ impl ViewerPane {
     pub fn new(
         cmd_sender: mpsc::Sender<PaneAction>,
         content_sig: ContentSignature,
-        mdl0_node: Option<VirtualNodeId>,
-        node_map: VirtualNodeMap,
+        mdl0_node: Option<IrNodeKey>,
+        arena: IrArena,
         render_state: GraphicsState,
     ) -> SlipstreamResult<Box<dyn Pane>> {
         let model = mdl0_node
-            .map(|node| ModelScratch::from_root(node, node_map.clone()))
+            .map(|node| ModelScratch::from_root(node, arena.clone()))
             .transpose()?
             .map(|bufs| bufs.resolve_shapes(&render_state.device))
             .transpose()?;
@@ -69,7 +69,7 @@ impl ViewerPane {
             cmd_sender,
             content_sig,
             node: mdl0_node,
-            node_map,
+            arena,
             render_state,
             model,
         }))
