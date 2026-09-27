@@ -7,9 +7,9 @@ use std::{
     },
 };
 
-use parking_lot::RwLock;
+use parking_lot::{ArcRwLockReadGuard, RwLock};
 
-use crate::node::node::{ContentSlot, IrNode, IrNodeType};
+use crate::node::{guard::ContentReadGuard, node::{ContentSlot, IrNode, IrNodeType}};
 
 /// A key that can be used to refer to a node.
 ///
@@ -110,6 +110,14 @@ impl IrArena {
         );
 
         key
+    }
+
+    /// Attempts to load the node's contents. Parsing it if it has not been evaluated yet.
+    /// 
+    /// ## Note:
+    /// This function is blocking, it should not be used on the UI thread.
+    pub fn get_content(&self, key: IrNodeKey) -> Option<ContentReadGuard> {
+        self.map.read().get(&key).map(ContentReadGuard::from)
     }
 
     /// Loads the given node and runs `inspect_fn` with a shared reference to it.

@@ -31,6 +31,25 @@ impl ContentSlot {
     pub const fn none() -> Self {
         Self::Eager(None)
     }
+
+    pub fn is_parsed(&self) -> bool {
+        match self {
+            Self::Eager(_) => true,
+            Self::Lazy(lock,_ ) => lock.get().is_some()
+        }
+    }
+
+    /// Forces the slot to be parsed.
+    pub fn get_or_init(&self) -> Option<&(dyn Visitable + Send + Sync)> {
+        match self {
+            Self::Eager(x) => x.map(|y| y.as_ref()),
+            Self::Lazy(lock, payload) => {
+                Some(lock.get_or_init(|| {
+
+                }))
+            }
+        }
+    }
 }
 
 pub enum ContentResult<'a> {

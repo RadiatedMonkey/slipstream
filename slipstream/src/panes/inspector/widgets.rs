@@ -1,4 +1,4 @@
-use crate::node::arena::IrNodeKey;
+use slipstream_ir::node::arena::IrNodeKey;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum DraggableNodeKind {
@@ -12,6 +12,9 @@ pub struct DraggableNodePayload {
     pub kind: DraggableNodeKind,
 }
 
+/// Draws a draggable reference to another node.
+/// 
+/// This is used in place of raw indices, to make the editor easier to use.
 pub fn draw_node_reference(id: egui::Id, node: Option<IrNodeKey>, ui: &mut egui::Ui) {
     let frame = egui::Frame::default().inner_margin(4.0);
 
@@ -42,6 +45,7 @@ pub fn draw_node_reference(id: egui::Id, node: Option<IrNodeKey>, ui: &mut egui:
     }
 }
 
+/// Draws an editable vector where every value has a given label and suffix.
 pub fn draw_vec_drag_values_suffixed<T: egui::emath::Numeric, const N: usize>(
     mut input_field_size: egui::Vec2,
     labels: [&str; N],
@@ -73,6 +77,9 @@ pub fn draw_vec_drag_values_suffixed<T: egui::emath::Numeric, const N: usize>(
     });
 }
 
+/// Draws an editable vector where every component has a given label.
+/// 
+/// See [`draw_vec_drag_values_suffixed`] for a version that also adds value suffixes (such as the circle for degrees).
 pub fn draw_vec_drag_values<T: egui::emath::Numeric, const N: usize>(
     mut input_field_size: egui::Vec2,
     labels: [&str; N],

@@ -1,11 +1,11 @@
 pub mod mdl0;
-pub mod raw;
 pub mod widgets;
 
 use std::sync::mpsc;
 
+use slipstream_ir::node::arena::{IrArena, IrNodeKey};
+
 use crate::{
-    node::arena::{IrArena, IrNodeKey},
     panes::{ContentSignature, Pane, PaneAction},
     reg_icon,
 };
