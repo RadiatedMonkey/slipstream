@@ -5,8 +5,8 @@ use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::{CorruptionError, SlipstreamError, SlipstreamResult};
 
-use crate::node::node::IrNodeType;
 use crate::mdl0::section::DeserializeSection;
+use crate::node::node::IrNodeType;
 use crate::util::{VectorDivisor, VertexFormat, deserialize_vector_data};
 use crate::visitor::{Visitable, Visitor};
 

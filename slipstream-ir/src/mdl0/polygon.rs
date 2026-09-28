@@ -6,17 +6,17 @@ use slipstream_shared::{
     error::{CorruptionError, InvalidInputError, SlipstreamError, SlipstreamResult},
 };
 
+use crate::mdl0::section::DeserializeSection;
 use crate::{
     encoding::ReadArrayExt,
     gx::{
-        load_cp::{CpVatA, CpVatB, CpVatC, CpVcdHi, CpVcdLo, LoadCpOpCode}, load_xf::{LoadXfOpCode, LoadXfPayload},
-        GxBytecode,
-        GxOpCode,
+        GxBytecode, GxOpCode,
+        load_cp::{CpVatA, CpVatB, CpVatC, CpVcdHi, CpVcdLo, LoadCpOpCode},
+        load_xf::{LoadXfOpCode, LoadXfPayload},
     },
     node::node::IrNodeType,
     visitor::{Visitable, Visitor},
 };
-use crate::mdl0::section::DeserializeSection;
 
 /// Maps shape local matrix IDs to global ones.
 ///

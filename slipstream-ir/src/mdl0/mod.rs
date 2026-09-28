@@ -5,11 +5,11 @@ pub mod materials;
 pub mod normals;
 pub mod pal_links;
 pub mod polygon;
+pub mod section;
 pub mod tevs;
 pub mod tex_links;
 pub mod uvs;
 pub mod vertices;
-pub mod section;
 
 use std::ops::ControlFlow;
 
@@ -27,9 +27,9 @@ use crate::mdl0::uvs::UvBuffer;
 use crate::mdl0::vertices::VertexBuffer;
 use crate::node::arena::{IrArena, IrNodeDescriptor, IrNodeKey};
 use crate::node::node::{ContentSlot, IrNode, IrNodeType};
-use section::deserialize_leaf_section;
 use crate::visitor::{Visitable, Visitor};
 use byteorder::{BigEndian, ReadBytesExt};
+use section::deserialize_leaf_section;
 use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::{
     CorruptionError, SlipstreamError, SlipstreamResult, UnsupportedError,

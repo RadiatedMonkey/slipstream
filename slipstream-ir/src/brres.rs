@@ -270,7 +270,7 @@ fn deserialize_nw4r_subdirectories(
     reader: &mut RefCursor<[u8]>,
     label: String,
     parent_key: IrNodeKey,
-    arena: &IrArena
+    arena: &IrArena,
 ) -> SlipstreamResult<IrNodeKey> {
     let index = IndexGroup::deserialize(reader)?;
 
@@ -291,13 +291,16 @@ fn deserialize_nw4r_subdirectories(
         bfiles.push(deserialize_bfile(reader, dir_key, arena, label)?);
     }
 
-    arena.insert_at(dir_key, IrNodeDescriptor {
-        label,
-        ty: IrNodeType::Nw4rDirectory,
-        parent: Some(parent_key),
-        children: bfiles,
-        ..Default::default()
-    });
+    arena.insert_at(
+        dir_key,
+        IrNodeDescriptor {
+            label,
+            ty: IrNodeType::Nw4rDirectory,
+            parent: Some(parent_key),
+            children: bfiles,
+            ..Default::default()
+        },
+    );
 
     Ok(dir_key)
 }
@@ -320,7 +323,9 @@ fn deserialize_nw4r_directories(
 
         tracing::trace!("Deserializing BRRES NW4R directory `{label}`");
 
-        section_dirs.push(deserialize_nw4r_subdirectories(reader, label, parent_key, arena)?);
+        section_dirs.push(deserialize_nw4r_subdirectories(
+            reader, label, parent_key, arena,
+        )?);
     }
 
     Ok(section_dirs)

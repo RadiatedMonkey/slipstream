@@ -6,13 +6,13 @@ use slipstream_shared::{
     error::{CorruptionError, SlipstreamResult},
 };
 
+use crate::mdl0::section::DeserializeSection;
 use crate::{
     encoding::ReadArrayExt,
     node::node::IrNodeType,
-    util::{deserialize_scalar_data, deserialize_vector_data, VectorDivisor, VertexFormat},
+    util::{VectorDivisor, VertexFormat, deserialize_scalar_data, deserialize_vector_data},
     visitor::{Visitable, Visitor},
 };
-use crate::mdl0::section::DeserializeSection;
 
 const COMPONENTS_S: u32 = 0x00;
 const COMPONENTS_ST: u32 = 0x01;

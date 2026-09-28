@@ -8,6 +8,7 @@ use slipstream_shared::{
     error::{CorruptionError, SlipstreamError, SlipstreamResult},
 };
 
+use crate::mdl0::section::DeserializeSection;
 use crate::{
     encoding::ReadArrayExt,
     gx::load_bp::{AlphaFunction, BlendMode, ConstantAlpha, DepthTest, LoadBpOpCode},
@@ -15,7 +16,6 @@ use crate::{
     node::node::IrNodeType,
     visitor::{Visitable, Visitor},
 };
-use crate::mdl0::section::DeserializeSection;
 
 #[bitfield(u32)]
 #[derive(PartialEq, Eq)]

@@ -3,11 +3,11 @@ use std::ops::ControlFlow;
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::{cursor::RefCursor, error::SlipstreamResult};
 
+use crate::mdl0::section::DeserializeSection;
 use crate::{
     node::node::IrNodeType,
     visitor::{Visitable, Visitor},
 };
-use crate::mdl0::section::DeserializeSection;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PaletteLink {

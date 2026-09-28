@@ -54,7 +54,7 @@ impl ViewerPane {
         //     .transpose()?
         //     .map(|bufs| bufs.resolve_shapes(&render_state.device))
         //     .transpose()?;
-        
+
         let model = None;
 
         let pipeline = ViewerPipeline::new(render_state.clone());

@@ -3,8 +3,8 @@ use std::ops::ControlFlow;
 use crate::encoding::ReadArrayExt;
 use crate::gx::GxBytecode;
 
-use crate::node::node::IrNodeType;
 use crate::mdl0::section::DeserializeSection;
+use crate::node::node::IrNodeType;
 use crate::visitor::{Visitable, Visitor};
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::cursor::RefCursor;
