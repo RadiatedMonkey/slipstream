@@ -250,7 +250,7 @@ fn deserialize_bfile(
         // Chr0Subfile::MAGIC => Chr0Subfile::deserialize_lazy(reader),
         _ => {
             let key = arena.insert(IrNodeDescriptor {
-                label: String::from("<unparsed>"),
+                label: String::from("<unimplemented>"),
                 ty: IrNodeType::Unknown,
                 contents: ContentSlot::eager(Box::new(UnknownFile {
                     reader: reader.clone(),
@@ -265,7 +265,7 @@ fn deserialize_bfile(
 
 /// Deserializes the contents of NW4R directories.
 ///
-/// These are the actual roots of MDL0, CHR0, etc files.
+/// These are the actual roots of MDL0, CHR0, ßetc files.
 fn deserialize_nw4r_subdirectories(
     reader: &mut RefCursor<[u8]>,
     label: String,
