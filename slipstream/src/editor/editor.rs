@@ -13,7 +13,7 @@ use crate::pages::intro::IntroPage;
 use crate::panes::log::LogPane;
 use crate::panes::outliner::OutlinerPane;
 use crate::panes::viewer::ViewerPane;
-use crate::panes::{ContentSignature, Pane, PaneAction, PaneBehavior, RequestNewPane};
+use crate::panes::{Pane, PaneAction, PaneBehavior, RequestNewPane};
 use crate::shared::GraphicsState;
 
 pub struct Properties {
@@ -192,7 +192,7 @@ impl Editor {
             //     inspected,
             //     self.arena.clone(),
             // ),
-            RequestNewPane::Inspector { inspected } => todo!("implement inspector"),
+            RequestNewPane::Inspector { inspected: _ } => todo!("implement inspector"),
             RequestNewPane::Viewer { viewed } => ViewerPane::new(
                 self.pane_behavior.sender.clone(),
                 content_sig,

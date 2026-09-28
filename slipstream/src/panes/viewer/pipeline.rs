@@ -44,9 +44,9 @@ impl egui_wgpu::CallbackTrait for ViewerCallback {
 
     fn paint(
         &self,
-        info: egui::PaintCallbackInfo,
-        render_pass: &mut wgpu::RenderPass<'static>,
-        callback_resources: &egui_wgpu::CallbackResources,
+        _info: egui::PaintCallbackInfo,
+        _render_pass: &mut wgpu::RenderPass<'static>,
+        _callback_resources: &egui_wgpu::CallbackResources,
     ) {
     }
 }

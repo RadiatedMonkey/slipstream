@@ -7,12 +7,12 @@ use slipstream_shared::{
     error::{CorruptionError, InvalidInputError, SlipstreamError, SlipstreamResult},
 };
 
+use crate::mdl0::section::DeserializeSection;
 use crate::{
     encoding::ReadArrayExt,
     node::node::IrNodeType,
     visitor::{Visitable, Visitor},
 };
-use crate::mdl0::section::DeserializeSection;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ColorComponents {

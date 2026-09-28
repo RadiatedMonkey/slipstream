@@ -9,7 +9,7 @@ use slipstream_shared::error::{
 use crate::brres::{self, BRRES_MAGIC};
 use crate::encoding::{ReadArrayExt, ReadStringExt};
 use crate::node::arena::{IrArena, IrNodeDescriptor, IrNodeKey};
-use crate::node::node::{ContentSlot, IrNode, IrNodeType};
+use crate::node::node::{ContentSlot, IrNodeType};
 use crate::visitor::{Visitable, Visitor};
 
 /// Magic of an ARC file.

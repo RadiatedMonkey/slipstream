@@ -57,7 +57,7 @@ impl Once {
     }
 
     #[inline]
-    pub fn set_state(&self, state: OnceState) {
+    pub fn set_state(&self, _state: OnceState) {
         todo!();
     }
 

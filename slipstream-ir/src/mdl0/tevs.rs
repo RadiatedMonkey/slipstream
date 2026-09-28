@@ -3,8 +3,8 @@ use std::ops::ControlFlow;
 use crate::encoding::ReadArrayExt;
 use crate::gx::GxBytecode;
 
-use crate::node::node::IrNodeType;
 use crate::mdl0::section::DeserializeSection;
+use crate::node::node::IrNodeType;
 use crate::visitor::{Visitable, Visitor};
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::cursor::RefCursor;
@@ -31,10 +31,10 @@ impl DeserializeSection for Tev {
         reader: &mut RefCursor<[u8]>,
         _header_start: u64,
     ) -> SlipstreamResult<Self> {
-        let length = reader.read_u32::<BigEndian>()?;
-        let mdl0_offset = reader.read_i32::<BigEndian>()?;
-        let index = reader.read_i32::<BigEndian>()?;
-        let stage_count = reader.read_u8()?;
+        let _length = reader.read_u32::<BigEndian>()?;
+        let _mdl0_offset = reader.read_i32::<BigEndian>()?;
+        let _index = reader.read_i32::<BigEndian>()?;
+        let _stage_count = reader.read_u8()?;
 
         reader.set_position(reader.position() + 3); // padding
 

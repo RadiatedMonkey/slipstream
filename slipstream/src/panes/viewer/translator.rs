@@ -1,24 +1,14 @@
 //! Translates between Wii models and wgpu ones.
 
-use bytemuck::Zeroable;
-use parking_lot::{
-    ArcRwLockReadGuard, MappedMutexGuard, MappedRwLockReadGuard, Mutex, MutexGuard, RwLockReadGuard,
-};
-use slipstream_ir::gx::GxOpCode;
 use slipstream_ir::gx::draw::{
-    DrawOpCode, InlineNormal, InlinePosition, NormalData, NormalIndex, OpVertex, PositionData,
+    InlineNormal, InlinePosition,
 };
-use slipstream_ir::mdl0::normals::NormalBuffer;
 use slipstream_ir::mdl0::polygon::Polygon;
-use slipstream_ir::mdl0::vertices::VertexBuffer;
 use slipstream_ir::node::arena::{IrArena, IrNodeKey};
 use slipstream_ir::node::node::IrNodeType;
-use slipstream_ir::visitor::Visitor;
 use slipstream_shared::error::{InvalidInputError, SlipstreamError, SlipstreamResult};
-use std::ops::ControlFlow;
 use std::sync::Arc;
-use std::{any::Any, borrow::Cow, collections::HashMap};
-use wgpu::util::DeviceExt;
+use std::collections::HashMap;
 
 use crate::panes::viewer::pipeline::{DEPTH_FORMAT, MSAA_SAMPLE_COUNT, TARGET_FORMAT};
 
@@ -77,7 +67,7 @@ impl InlineScratchBuffers {
         IndexAttrKey::Synthetic(self.positions.len() as u32 - 1)
     }
 
-    pub fn insert_normal(&mut self, normal: InlineNormal) -> IndexAttrKey {
+    pub fn insert_normal(&mut self, _normal: InlineNormal) -> IndexAttrKey {
         todo!()
     }
 }
@@ -259,7 +249,7 @@ pub struct PolygonScratch {
 
 impl PolygonScratch {
     /// Creates the vertex buffer layout for the given shape.
-    fn discover_layout(polygon: &Polygon) -> PipelineDescriptor {
+    fn discover_layout(_polygon: &Polygon) -> PipelineDescriptor {
         /// The basic layout that every pipeline will always contain.
         ///
         /// This contains just the position and the normal.

@@ -32,7 +32,7 @@ pub trait Pane: Send + Sync {
     /// Draws the UI of the pane.
     fn draw(&mut self, ui: &mut egui::Ui, tile_id: egui_tiles::TileId) -> egui_tiles::UiResponse;
 
-    fn highlight(&self, painter: &mut egui::Painter) {
+    fn highlight(&self, _painter: &mut egui::Painter) {
         todo!()
     }
 }

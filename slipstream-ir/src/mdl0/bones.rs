@@ -16,7 +16,6 @@ use crate::{
     },
     visitor::{Visitable, Visitor},
 };
-use crate::mdl0::section::DeserializeSection;
 
 #[bitfield(u32)]
 #[derive(PartialEq, Eq)]
@@ -243,7 +242,7 @@ impl Visitable for Bone {
 /// Builds a nested tree of bones as nodes and returns the root node of the skeleton.
 fn build_skeleton_tree(
     reader: &mut RefCursor<[u8]>,
-    root_key: IrNodeKey,
+    _root_key: IrNodeKey,
     bones: &[LabeledBone],
     arena: &IrArena,
 ) -> SlipstreamResult<IrNodeKey> {

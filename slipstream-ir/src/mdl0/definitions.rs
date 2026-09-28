@@ -4,8 +4,8 @@ use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::{CorruptionError, SlipstreamResult};
 
-use crate::node::node::IrNodeType;
 use crate::mdl0::section::DeserializeSection;
+use crate::node::node::IrNodeType;
 use crate::visitor::{Visitable, Visitor};
 
 /// The opcode IDs for the possible commands in the definitions section of an MDL0 file.
