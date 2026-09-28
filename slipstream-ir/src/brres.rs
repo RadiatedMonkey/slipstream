@@ -10,7 +10,7 @@ use crate::encoding::ReadArrayExt;
 use crate::index::IndexGroup;
 use crate::mdl0::{self, MDL0_MAGIC};
 use crate::node::arena::{IrArena, IrNodeDescriptor, IrNodeKey};
-use crate::node::node::{ContentSlot, IrNode, IrNodeType};
+use crate::node::node::{ContentSlot, IrNodeType};
 
 /// Equals "bres". This is always at the start of a BRRES file.
 pub const BRRES_MAGIC: [u8; 4] = [0x62, 0x72, 0x65, 0x73];

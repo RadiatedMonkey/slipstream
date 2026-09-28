@@ -224,21 +224,21 @@ impl DeserializeSection for Polygon {
         _header_start: u64,
     ) -> SlipstreamResult<Self> {
         let object_start = reader.position();
-        let length = reader.read_u32::<BigEndian>()?;
-        let mdl0_offset = reader.read_i32::<BigEndian>()?;
+        let _length = reader.read_u32::<BigEndian>()?;
+        let _mdl0_offset = reader.read_i32::<BigEndian>()?;
         let bone_index = match reader.read_i32::<BigEndian>()? {
             -1 => None,
             v => Some(v as u32),
         };
 
-        let cp_vtx = reader.read_u32::<BigEndian>()?;
-        let cp_tex = reader.read_u32::<BigEndian>()?;
-        let xf_nor_spec = reader.read_u32::<BigEndian>()?;
+        let _cp_vtx = reader.read_u32::<BigEndian>()?;
+        let _cp_tex = reader.read_u32::<BigEndian>()?;
+        let _xf_nor_spec = reader.read_u32::<BigEndian>()?;
 
-        let definitions_buffer_size = reader.read_u32::<BigEndian>()?;
+        let _definitions_buffer_size = reader.read_u32::<BigEndian>()?;
         let definitions_size = reader.read_u32::<BigEndian>()?;
         let definitions_offset = reader.read_i32::<BigEndian>()?;
-        let vertex_buffer_size = reader.read_u32::<BigEndian>()?;
+        let _vertex_buffer_size = reader.read_u32::<BigEndian>()?;
         let vertex_data_size = reader.read_u32::<BigEndian>()?;
         let vertex_data_offset = reader.read_i32::<BigEndian>()?;
         let array_flags = reader.read_u32::<BigEndian>()?;

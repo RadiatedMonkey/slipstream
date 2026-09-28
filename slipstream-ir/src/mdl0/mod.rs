@@ -26,7 +26,7 @@ use crate::mdl0::tex_links::TextureLinks;
 use crate::mdl0::uvs::UvBuffer;
 use crate::mdl0::vertices::VertexBuffer;
 use crate::node::arena::{IrArena, IrNodeDescriptor, IrNodeKey};
-use crate::node::node::{ContentSlot, IrNode, IrNodeType};
+use crate::node::node::{ContentSlot, IrNodeType};
 use crate::visitor::{Visitable, Visitor};
 use byteorder::{BigEndian, ReadBytesExt};
 use section::deserialize_leaf_section;

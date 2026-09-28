@@ -6,7 +6,6 @@ use crate::{
         arena::{IrArena, IrNodeDescriptor, IrNodeKey},
         node::{ContentSlot, IrNodeType},
     },
-    visitor::Visitable,
 };
 
 pub trait DeserializeSection: Sized {
@@ -27,7 +26,7 @@ pub trait DeserializeSection: Sized {
 #[tracing::instrument(skip_all)]
 pub fn deserialize_leaf_section<T: DeserializeSection>(
     reader: &mut RefCursor<[u8]>,
-    header_start: u32,
+    _header_start: u32,
     parent: IrNodeKey,
     arena: &IrArena,
 ) -> SlipstreamResult<IrNodeKey> {

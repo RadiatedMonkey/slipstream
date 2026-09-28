@@ -207,7 +207,7 @@ unsafe impl Sync for LazyContent {}
 unsafe impl Send for LazyContent {}
 
 #[cold]
-fn parse_payload(payload: DeferPayload) -> Box<DynContent> {
+fn parse_payload(_payload: DeferPayload) -> Box<DynContent> {
     todo!()
 }
 

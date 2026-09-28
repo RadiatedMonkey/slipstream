@@ -1,6 +1,6 @@
 use std::ops::ControlFlow;
 
-use bitfield_struct::{bitenum, bitfield};
+use bitfield_struct::bitfield;
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::{
     assert_u8,

@@ -7,7 +7,6 @@ use slipstream_shared::{
     error::{CorruptionError, InvalidInputError, SlipstreamError, SlipstreamResult},
 };
 
-use crate::mdl0::section::DeserializeSection;
 use crate::{
     encoding::ReadArrayExt,
     index::IndexGroup,
@@ -243,7 +242,7 @@ impl Visitable for Bone {
 /// Builds a nested tree of bones as nodes and returns the root node of the skeleton.
 fn build_skeleton_tree(
     reader: &mut RefCursor<[u8]>,
-    root_key: IrNodeKey,
+    _root_key: IrNodeKey,
     bones: &[LabeledBone],
     arena: &IrArena,
 ) -> SlipstreamResult<IrNodeKey> {
