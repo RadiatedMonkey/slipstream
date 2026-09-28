@@ -3,30 +3,23 @@ pub mod pipeline;
 pub mod translator;
 
 use std::{
-    hash::{DefaultHasher, Hash, Hasher},
+    hash::Hasher,
     sync::{Arc, mpsc},
 };
 
 use eframe::egui_wgpu;
-use egui::mutex::RwLock;
 use slipstream_ir::node::arena::{IrArena, IrNodeKey};
 use slipstream_shared::error::SlipstreamResult;
-use wgpu::util::DeviceExt;
 
 use crate::panes::viewer::translator::DrawableModel;
 use crate::{
     panes::{
         ContentSignature, Pane, PaneAction,
-        viewer::{
-            pipeline::{TEXTURE_FILTER_MODE, ViewerCallback, ViewerPipeline},
-            translator::{ModelScratch, PolygonScratch},
-        },
+        viewer::pipeline::{TEXTURE_FILTER_MODE, ViewerCallback, ViewerPipeline},
     },
     shared::{
         GraphicsState,
-        camera::{Camera, CameraController, CameraUniformData, OrbitCamera},
-        vertex::{CUBE_INDICES, CUBE_VERTICES, Vertex3},
-        wgsl_include,
+        camera::CameraController,
     },
 };
 

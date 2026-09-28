@@ -1,13 +1,10 @@
-use std::{
-    hash::Hasher,
-    sync::{Arc, mpsc},
-};
+use std::sync::{Arc, mpsc};
 
 use slipstream_ir::node::{
     arena::{IrArena, IrNodeKey},
     node::{IrNode, IrNodeType},
 };
-use slipstream_shared::error::{InvalidInputError, SlipstreamError, SlipstreamResult};
+use slipstream_shared::error::{SlipstreamError, SlipstreamResult};
 
 use crate::{
     icons::NodeVisualsExt,
@@ -107,11 +104,11 @@ impl OutlinerPane {
                 }
 
                 // We also need separate context menus for the row and label responses, although they both display the same content.
-                row_response.context_menu(|ui| {
+                row_response.context_menu(|_ui| {
                     todo!();
                 });
 
-                label_response.context_menu(|ui| {
+                label_response.context_menu(|_ui| {
                     todo!();
                 });
             });
@@ -159,7 +156,7 @@ impl OutlinerPane {
                     .expect("failed to send inspector pane open request");
             }
 
-            response.context_menu(|ui| {
+            response.context_menu(|_ui| {
                 todo!("draw node context menu");
             });
         });
