@@ -19,7 +19,7 @@ pub trait DeserializeSection: Sized {
     ) -> SlipstreamResult<Self>;
 }
 
-/// Deserializes a BRRES section (normals, vertices, etc) that has a simple layout.
+/// Deserializes an MDL0 section (normals, vertices, etc) that has a simple layout.
 ///
 /// This function returns the key to the deserialized section node.
 ///
@@ -56,7 +56,7 @@ pub fn deserialize_leaf_section<T: DeserializeSection>(
         section_key,
         IrNodeDescriptor {
             label: T::NAME.to_owned(),
-            ty: IrNodeType::BrresDirectory,
+            ty: T::KIND,
             parent: Some(parent),
             children: entries,
             ..Default::default()

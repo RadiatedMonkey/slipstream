@@ -34,38 +34,26 @@ macro_rules! fill_icon {
 
 /// Extends [`IrNodeType`], providing UI specific utilities to node types.
 pub trait NodeVisualsExt {
-    /// Whether this node can be opened like a folder.
-    fn is_expandable(&self) -> bool;
     /// The icon to display when this node is open.
-    ///
-    /// This is only used for nodes that can be expanded.
     fn open_icon(&self) -> egui::RichText;
     /// The icon to display when this node is closed.
-    ///
-    /// This is also the icon used for nodes that cannot be opened.
     fn closed_icon(&self) -> egui::RichText;
 }
 
 impl NodeVisualsExt for IrNodeType {
-    fn is_expandable(&self) -> bool {
-        match self {
-            Self::ArcDirectory { empty: false } | Self::BrresDirectory | Self::BrresFile => true,
-            _ => false,
-        }
-    }
-
     fn open_icon(&self) -> egui::RichText {
         match self {
-            Self::ArcDirectory { empty: false } | Self::BrresDirectory | Self::BrresFile => {
+            Self::ArcDirectory { empty: false } | Self::BrresFile | Self::Nw4rDirectory => {
                 reg_icon!(FOLDER_OPEN)
             }
-            _ => unimplemented!("cannot call `NodeVisualsExt::open_icon` on a non-expandable node"),
+            // Just reuse the closed icon for everything else.
+            _ => self.closed_icon(),
         }
     }
 
     fn closed_icon(&self) -> egui::RichText {
         match self {
-            Self::ArcDirectory { empty: false } | Self::BrresDirectory => reg_icon!(FOLDER),
+            Self::ArcDirectory { empty: false } | Self::Nw4rDirectory => reg_icon!(FOLDER),
             Self::ArcDirectory { empty: true } => reg_icon!(FOLDER_DASHED),
             Self::BrresFile => reg_icon!(FOLDER),
             Self::Mdl0Root => reg_icon!(PERSON),

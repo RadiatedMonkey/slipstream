@@ -10,9 +10,9 @@ use slipstream_shared::{
 use crate::{
     encoding::ReadArrayExt,
     node::node::IrNodeType,
-    section::DeserializeSection,
     visitor::{Visitable, Visitor},
 };
+use crate::mdl0::section::DeserializeSection;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ColorComponents {

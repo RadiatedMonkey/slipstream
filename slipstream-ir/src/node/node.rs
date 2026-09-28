@@ -121,9 +121,10 @@ pub enum IrNodeType {
         /// Whether the directory is empty. If it is, it will be inactive and have a special icon.
         empty: bool,
     },
+    /// A BRRES file.
     BrresFile,
-    /// A directory in a BRRES file.
-    BrresDirectory,
+    /// The directories prefixed with `NW4R`.
+    Nw4rDirectory,
     /// The root of an MDL0 model. This should contain the section directories `Vertices`, `Normals`.
     Mdl0Root,
     /// The bytecode section of an MDL0 file.

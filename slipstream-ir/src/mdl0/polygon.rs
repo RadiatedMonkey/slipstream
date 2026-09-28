@@ -9,14 +9,14 @@ use slipstream_shared::{
 use crate::{
     encoding::ReadArrayExt,
     gx::{
-        GxBytecode, GxOpCode,
-        load_cp::{CpVatA, CpVatB, CpVatC, CpVcdHi, CpVcdLo, LoadCpOpCode},
-        load_xf::{LoadXfOpCode, LoadXfPayload},
+        load_cp::{CpVatA, CpVatB, CpVatC, CpVcdHi, CpVcdLo, LoadCpOpCode}, load_xf::{LoadXfOpCode, LoadXfPayload},
+        GxBytecode,
+        GxOpCode,
     },
     node::node::IrNodeType,
-    section::DeserializeSection,
     visitor::{Visitable, Visitor},
 };
+use crate::mdl0::section::DeserializeSection;
 
 /// Maps shape local matrix IDs to global ones.
 ///

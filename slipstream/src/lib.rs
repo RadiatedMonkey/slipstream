@@ -34,7 +34,7 @@ pub fn setup_tracing() {
         use crate::shared::mem_logger::GlobalMemLogLayer;
 
         let target_filter =
-            tracing_subscriber::filter::filter_fn(|meta| meta.target().contains("mktools"));
+            tracing_subscriber::filter::filter_fn(|meta| meta.target().contains("slipstream"));
 
         let mem_layer =
             GlobalMemLogLayer::new().with_filter(tracing_subscriber::EnvFilter::new("debug"));

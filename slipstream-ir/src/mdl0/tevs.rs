@@ -4,7 +4,7 @@ use crate::encoding::ReadArrayExt;
 use crate::gx::GxBytecode;
 
 use crate::node::node::IrNodeType;
-use crate::section::DeserializeSection;
+use crate::mdl0::section::DeserializeSection;
 use crate::visitor::{Visitable, Visitor};
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::cursor::RefCursor;

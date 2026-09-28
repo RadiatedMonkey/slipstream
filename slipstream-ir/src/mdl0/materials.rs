@@ -13,9 +13,9 @@ use crate::{
     gx::load_bp::{AlphaFunction, BlendMode, ConstantAlpha, DepthTest, LoadBpOpCode},
     mdl0::TextureMatrixMode,
     node::node::IrNodeType,
-    section::DeserializeSection,
     visitor::{Visitable, Visitor},
 };
+use crate::mdl0::section::DeserializeSection;
 
 #[bitfield(u32)]
 #[derive(PartialEq, Eq)]

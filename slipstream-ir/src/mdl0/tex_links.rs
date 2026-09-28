@@ -5,9 +5,9 @@ use slipstream_shared::{cursor::RefCursor, error::SlipstreamResult};
 
 use crate::{
     node::node::IrNodeType,
-    section::DeserializeSection,
     visitor::{Visitable, Visitor},
 };
+use crate::mdl0::section::DeserializeSection;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextureLink {

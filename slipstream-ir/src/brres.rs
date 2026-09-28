@@ -263,40 +263,70 @@ fn deserialize_bfile(
     }
 }
 
-fn deserialize_subdirectories(
+/// Deserializes the contents of NW4R directories.
+///
+/// These are the actual roots of MDL0, CHR0, etc files.
+fn deserialize_nw4r_subdirectories(
+    reader: &mut RefCursor<[u8]>,
+    label: String,
+    parent_key: IrNodeKey,
+    arena: &IrArena
+) -> SlipstreamResult<IrNodeKey> {
+    let index = IndexGroup::deserialize(reader)?;
+
+    let dir_key = arena.reserve_key();
+
+    let mut bfiles = Vec::with_capacity(index.entries.len() - 1);
+    for bfile in &index.entries[1..] {
+        let label = index.get_entry_name(reader, bfile)?;
+        let data_start = index.get_entry_data_start(bfile);
+
+        reader.set_position(data_start);
+
+        {
+            let magic = &reader.remaining()[..4];
+            tracing::trace!("Magic is {}", String::from_utf8_lossy(magic));
+        }
+
+        bfiles.push(deserialize_bfile(reader, dir_key, arena, label)?);
+    }
+
+    arena.insert_at(dir_key, IrNodeDescriptor {
+        label,
+        ty: IrNodeType::Nw4rDirectory,
+        parent: Some(parent_key),
+        children: bfiles,
+        ..Default::default()
+    });
+
+    Ok(dir_key)
+}
+
+/// Deserializes the directories with an NW4R suffix,
+/// i.e. `3DModels(NW4R)` or `Textures(NW4R)`
+fn deserialize_nw4r_directories(
     reader: &mut RefCursor<[u8]>,
     parent_key: IrNodeKey,
     arena: &IrArena,
 ) -> SlipstreamResult<Vec<IrNodeKey>> {
     let index = IndexGroup::deserialize(reader)?;
 
-    let mut subdirs = Vec::with_capacity(index.entries.len() - 1);
-    for subdir in &index.entries[1..] {
-        let label = index.get_entry_name(reader, subdir)?;
-        let data_start = index.get_entry_data_start(subdir);
+    let mut section_dirs = Vec::with_capacity(index.entries.len() - 1);
+    for section_dir in &index.entries[1..] {
+        let label = index.get_entry_name(reader, section_dir)?;
+        let data_start = index.get_entry_data_start(section_dir);
 
         reader.set_position(data_start);
 
-        tracing::trace!("Deserializing BRRES directory `{label}`");
+        tracing::trace!("Deserializing BRRES NW4R directory `{label}`");
 
-        let subdir_key = arena.reserve_key();
-
-        arena.insert_at(
-            subdir_key,
-            IrNodeDescriptor {
-                label,
-                ty: IrNodeType::BrresDirectory,
-                parent: Some(parent_key),
-                ..Default::default()
-            },
-        );
-
-        subdirs.push(subdir_key);
+        section_dirs.push(deserialize_nw4r_subdirectories(reader, label, parent_key, arena)?);
     }
 
-    Ok(subdirs)
+    Ok(section_dirs)
 }
 
+/// Deserializes the root of a BRRES file.
 pub fn deserialize(
     reader: &mut RefCursor<[u8]>,
     parent_key: Option<IrNodeKey>,
@@ -309,7 +339,7 @@ pub fn deserialize(
     let _root = RootSection::deserialize(reader)?;
 
     let brres_key = arena.reserve_key();
-    let brres_subdirectories = deserialize_subdirectories(reader, brres_key, arena)?;
+    let brres_subdirectories = deserialize_nw4r_directories(reader, brres_key, arena)?;
 
     arena.insert_at(
         brres_key,

@@ -14,9 +14,9 @@ use crate::{
         arena::{IrArena, IrNodeDescriptor, IrNodeKey},
         node::{ContentSlot, IrNodeType},
     },
-    section::DeserializeSection,
     visitor::{Visitable, Visitor},
 };
+use crate::mdl0::section::DeserializeSection;
 
 #[bitfield(u32)]
 #[derive(PartialEq, Eq)]

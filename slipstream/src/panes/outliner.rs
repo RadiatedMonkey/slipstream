@@ -95,7 +95,7 @@ impl OutlinerPane {
 
                 let label_response = ui.label(node.label());
 
-                // This is kind of hack, but the collapsing states responses kind of suck.
+                // This is a hack, but the collapsing states responses kind of suck.
                 //
                 // We generate our own responses on the outliner row and label of the file, as the collapsing header does
                 // not respond to these by default.
@@ -175,12 +175,10 @@ impl OutlinerPane {
     fn draw_file_tree(&self, root_node: IrNodeKey, ui: &mut egui::Ui) -> SlipstreamResult<()> {
         self.arena
             .inspect(root_node, |curr_node| {
-                let node_ty = curr_node.ty;
-
-                if node_ty.is_expandable() {
-                    self.draw_directory_node(curr_node, ui)
-                } else {
+                if curr_node.children.is_empty() {
                     self.draw_leaf_node(curr_node, ui)
+                } else {
+                    self.draw_directory_node(curr_node, ui)
                 }
             })
             .transpose()?;

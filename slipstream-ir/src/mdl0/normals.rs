@@ -6,7 +6,7 @@ use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::{CorruptionError, SlipstreamError, SlipstreamResult};
 
 use crate::node::node::IrNodeType;
-use crate::section::DeserializeSection;
+use crate::mdl0::section::DeserializeSection;
 use crate::util::{VectorDivisor, VertexFormat, deserialize_vector_data};
 use crate::visitor::{Visitable, Visitor};
 
