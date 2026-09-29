@@ -4,3 +4,4 @@ dump.bin
 model.txt
 output.png
 slipstream/expand.rs
+slipstream-derive/expand.rs
