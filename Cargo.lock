@@ -3342,6 +3342,10 @@ dependencies = [
 [[package]]
 name = "slipstream-derive"
 version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn 3.0.6",
+]
 
 [[package]]
 name = "slipstream-ir"
