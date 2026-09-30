@@ -7,9 +7,11 @@ use slipstream_ir::node::{
 use slipstream_shared::error::{SlipstreamError, SlipstreamResult};
 
 use crate::{
-    icons::NodeVisualsExt,
+    icons::NodeIconsExt,
     panes::{ContentSignature, Pane, PaneAction, PaneId, RequestNewPane},
 };
+
+
 
 /// The outliner displays a file tree.
 ///
@@ -52,6 +54,26 @@ impl OutlinerPane {
     fn get_state_id(node_key: IrNodeKey, ui: &mut egui::Ui) -> egui::Id {
         let salt = ((PaneId::Outliner as u64) << 32) | u64::from(node_key);
         ui.make_persistent_id(salt)
+    }
+
+    fn draw_context_menu(&self, node: &IrNode, ui: &mut egui::Ui) -> SlipstreamResult<()> {
+        if ui.button("Rename").clicked() {
+            todo!("rename");
+        }
+
+        if ui.button("Open in new outliner").clicked() {
+            self.cmd_sender.send(PaneAction::RequestNewPane(RequestNewPane::Outliner {
+                root: node.key()
+            }))?;
+        }
+
+        if ui.button("Properties").clicked() {
+            self.cmd_sender.send(PaneAction::RequestNewPane(RequestNewPane::Inspector {
+                inspected: node.key()
+            }))?;
+        }
+
+        Ok(())
     }
 
     fn draw_directory_node(&self, node: &IrNode, ui: &mut egui::Ui) -> SlipstreamResult<()> {
@@ -104,12 +126,12 @@ impl OutlinerPane {
                 }
 
                 // We also need separate context menus for the row and label responses, although they both display the same content.
-                row_response.context_menu(|_ui| {
-                    todo!();
+                row_response.context_menu(|ui| {
+                    self.draw_context_menu(node, ui).unwrap();
                 });
 
-                label_response.context_menu(|_ui| {
-                    todo!();
+                label_response.context_menu(|ui| {
+                    self.draw_context_menu(node, ui).unwrap();
                 });
             });
 
@@ -156,8 +178,8 @@ impl OutlinerPane {
                     .expect("failed to send inspector pane open request");
             }
 
-            response.context_menu(|_ui| {
-                todo!("draw node context menu");
+            response.context_menu(|ui| {
+                self.draw_context_menu(node, ui).unwrap();
             });
         });
 

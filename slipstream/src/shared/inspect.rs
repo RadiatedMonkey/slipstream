@@ -46,15 +46,15 @@ pub struct InspectFieldHelper<'a> {
 }
 
 impl InspectFieldHelper<'_> {
-    fn draw(&self, ui: &mut egui::Ui) -> egui::Response {
-        let response = match self.value {
+    fn draw(&mut self, ui: &mut egui::Ui) -> egui::Response {
+        let response = match &mut self.value {
             FieldValue::Int { val, range } => {
-                let drag = egui::DragValue::new(val).range(*range);
+                let drag = egui::DragValue::new(*val).range(range.clone());
 
                 ui.add(drag)
             }
             FieldValue::Float { val, range } => {
-                let drag = egui::DragValue::new(val).range(*range);
+                let drag = egui::DragValue::new(*val).range(range.clone());
 
                 ui.add(drag)
             }
@@ -64,7 +64,7 @@ impl InspectFieldHelper<'_> {
                 ui.add(check)
             }
             FieldValue::Text(val) => {
-                let edit = egui::TextEdit::singleline(val);
+                let edit = egui::TextEdit::singleline(*val);
 
                 ui.add(edit)
             }

@@ -33,14 +33,14 @@ macro_rules! fill_icon {
 }
 
 /// Extends [`IrNodeType`], providing UI specific utilities to node types.
-pub trait NodeVisualsExt {
+pub trait NodeIconsExt {
     /// The icon to display when this node is open.
     fn open_icon(&self) -> egui::RichText;
     /// The icon to display when this node is closed.
     fn closed_icon(&self) -> egui::RichText;
 }
 
-impl NodeVisualsExt for IrNodeType {
+impl NodeIconsExt for IrNodeType {
     fn open_icon(&self) -> egui::RichText {
         match self {
             Self::ArcDirectory { empty: false } | Self::BrresFile | Self::Nw4rDirectory => {

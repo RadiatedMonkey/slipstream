@@ -2,7 +2,6 @@ use std::{
     fmt::{self, Display},
     ops::Range,
 };
-
 use thiserror::Error;
 
 /// Some type of operation was not supported.
@@ -175,17 +174,36 @@ pub enum SlipstreamError {
         #[from]
         source: InvalidInputError,
     },
-    #[error("channel send error: {source}")]
-    SendError {
-        #[from]
-        source: futures::channel::mpsc::SendError,
-    },
+    #[error("channel has been disconnected")]
+    ChannelDisconnect,
+    #[error("channel is full")]
+    ChannelFull
 }
 
 pub type SlipstreamResult<T> = Result<T, SlipstreamError>;
 
 impl<T> From<futures::channel::mpsc::TrySendError<T>> for SlipstreamError {
     fn from(value: futures::channel::mpsc::TrySendError<T>) -> Self {
-        value.into_send_error().into()
+        if value.is_disconnected() {
+            SlipstreamError::ChannelDisconnect
+        } else {
+            SlipstreamError::ChannelFull
+        }
+    }
+}
+
+impl From<futures::channel::mpsc::SendError> for SlipstreamError {
+    fn from(value: futures::channel::mpsc::SendError) -> Self {
+        if value.is_disconnected() {
+            SlipstreamError::ChannelDisconnect
+        } else {
+            SlipstreamError::ChannelFull
+        }
+    }
+}
+
+impl<T> From<std::sync::mpsc::SendError<T>> for SlipstreamError {
+    fn from(_value: std::sync::mpsc::SendError<T>) -> Self {
+        SlipstreamError::ChannelDisconnect
     }
 }

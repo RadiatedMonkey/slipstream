@@ -14,6 +14,7 @@ use crate::panes::log::LogPane;
 use crate::panes::outliner::OutlinerPane;
 use crate::panes::viewer::ViewerPane;
 use crate::panes::{Pane, PaneAction, PaneBehavior, RequestNewPane};
+use crate::panes::inspector::InspectorPane;
 use crate::shared::GraphicsState;
 
 pub struct Properties {
@@ -186,13 +187,12 @@ impl Editor {
                 root,
                 self.arena.clone(),
             ),
-            // RequestNewPane::Inspector { inspected } => InspectorPane::new(
-            //     self.pane_behavior.sender.clone(),
-            //     content_sig,
-            //     inspected,
-            //     self.arena.clone(),
-            // ),
-            RequestNewPane::Inspector { inspected: _ } => todo!("implement inspector"),
+            RequestNewPane::Inspector { inspected } => InspectorPane::new(
+                self.pane_behavior.sender.clone(),
+                content_sig,
+                inspected,
+                self.arena.clone(),
+            ),
             RequestNewPane::Viewer { viewed } => ViewerPane::new(
                 self.pane_behavior.sender.clone(),
                 content_sig,

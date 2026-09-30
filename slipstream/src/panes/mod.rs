@@ -8,6 +8,7 @@ use slipstream_ir::node::arena::IrNodeKey;
 pub mod log;
 pub mod outliner;
 pub mod viewer;
+pub mod inspector;
 
 /// Unlike the `egui_tiles`'s [`TileId`], this ID is created based on the content of the pane.
 ///
