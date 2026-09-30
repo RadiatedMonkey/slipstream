@@ -1,9 +1,9 @@
 pub mod camera;
+pub mod inspect;
 pub mod mem_logger;
 pub mod vertex;
 pub mod wgsl_include;
 pub mod widgets;
-pub mod inspect;
 
 use std::sync::Arc;
 

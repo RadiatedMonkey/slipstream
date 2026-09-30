@@ -17,10 +17,7 @@ use crate::{
         ContentSignature, Pane, PaneAction,
         viewer::pipeline::{TEXTURE_FILTER_MODE, ViewerCallback, ViewerPipeline},
     },
-    shared::{
-        GraphicsState,
-        camera::CameraController,
-    },
+    shared::{GraphicsState, camera::CameraController},
 };
 
 pub struct ViewerPane {

@@ -1,14 +1,12 @@
 //! Translates between Wii models and wgpu ones.
 
-use slipstream_ir::gx::draw::{
-    InlineNormal, InlinePosition,
-};
+use slipstream_ir::gx::draw::{InlineNormal, InlinePosition};
 use slipstream_ir::mdl0::polygon::Polygon;
 use slipstream_ir::node::arena::{IrArena, IrNodeKey};
 use slipstream_ir::node::node::IrNodeType;
 use slipstream_shared::error::{InvalidInputError, SlipstreamError, SlipstreamResult};
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::panes::viewer::pipeline::{DEPTH_FORMAT, MSAA_SAMPLE_COUNT, TARGET_FORMAT};
 

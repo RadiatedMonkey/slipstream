@@ -3346,6 +3346,7 @@ dependencies = [
  "darling",
  "proc-macro2",
  "quote",
+ "slipstream-shared",
  "syn 3.0.6",
 ]
 
