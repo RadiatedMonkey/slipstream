@@ -15,6 +15,7 @@ use slipstream_shared::{try_unwrap, verify};
 use std::collections::HashMap;
 use std::ops::ControlFlow;
 use std::sync::Arc;
+use wgpu::util::DeviceExt;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct VertexKey {
@@ -41,7 +42,12 @@ pub struct TranslatedVertex {
 }
 
 #[derive(Default, Debug)]
-struct ModelScratch {
+pub struct IntermediateModel {
+    pub polygons: Vec<IntermediatePolygon>,
+}
+
+#[derive(Default, Debug)]
+pub struct IntermediatePolygon {
     /// Maps a vertex index to a location in `vertices`.
     pub map: HashMap<VertexKey, VertexIndex>,
     /// This will become the new index buffer.
@@ -51,7 +57,7 @@ struct ModelScratch {
     pub inline_positions: Vec<[f32; 3]>,
 }
 
-impl ModelScratch {
+impl IntermediatePolygon {
     pub fn insert_inline_position(&mut self, position: [f32; 3]) -> VertexAttrKey {
         self.inline_positions.push(position);
         VertexAttrKey::Inline(self.inline_positions.len() as u16 - 1)
@@ -59,14 +65,14 @@ impl ModelScratch {
 }
 
 #[derive(Clone)]
-pub struct ModelVisitor<'a> {
+pub struct ModelTranslator<'a> {
     arena: &'a IrArena,
     vertices: Vec<IrNodeKey>,
     normals: Vec<IrNodeKey>,
     polygons: Vec<IrNodeKey>,
 }
 
-impl<'a> ModelVisitor<'a> {
+impl<'a> ModelTranslator<'a> {
     pub fn from_root(root: IrNodeKey, arena: &'a IrArena) -> SlipstreamResult<Self> {
         let mut visitor = Self {
             arena,
@@ -116,7 +122,7 @@ impl<'a> ModelVisitor<'a> {
 
     fn translate_vertex(
         &self,
-        scratch: &ModelScratch,
+        scratch: &IntermediatePolygon,
         polygon: &Polygon,
         vertex_key: &VertexKey,
     ) -> SlipstreamResult<TranslatedVertex> {
@@ -141,10 +147,9 @@ impl<'a> ModelVisitor<'a> {
         Ok(TranslatedVertex { position })
     }
 
-    #[tracing::instrument(skip_all)]
     fn resolve_vertex(
         &self,
-        scratch: &mut ModelScratch,
+        scratch: &mut IntermediatePolygon,
         polygon: &Polygon,
         vertex: &OpVertex,
     ) -> SlipstreamResult<VertexIndex> {
@@ -180,12 +185,14 @@ impl<'a> ModelVisitor<'a> {
         Ok(vertex_index)
     }
 
+    #[tracing::instrument(skip_all, fields(vertex_count = vertices.len()))]
     fn resolve_triangle_list(
         &self,
-        scratch: &mut ModelScratch,
+        scratch: &mut IntermediatePolygon,
         polygon: &Polygon,
         vertices: &[OpVertex],
     ) -> SlipstreamResult<()> {
+        scratch.indices.reserve(vertices.len());
         for vertex in vertices {
             let resolved = self.resolve_vertex(scratch, polygon, vertex)?;
             scratch.indices.push(resolved);
@@ -194,9 +201,34 @@ impl<'a> ModelVisitor<'a> {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(vertex_count = vertices.len()))]
+    fn resolve_triangle_strip(
+        &self,
+        scratch: &mut IntermediatePolygon,
+        polygon: &Polygon,
+        vertices: &[OpVertex],
+    ) -> SlipstreamResult<()> {
+        let expanded_len = (vertices.len() - 2) * 3;
+
+        scratch.indices.reserve(expanded_len);
+        for (i, [v1, v2, v3]) in vertices.array_windows().enumerate() {
+            let r1 = self.resolve_vertex(scratch, polygon, v1)?;
+            let r2 = self.resolve_vertex(scratch, polygon, v2)?;
+            let r3 = self.resolve_vertex(scratch, polygon, v3)?;
+
+            if i & 2 == 0 {
+                scratch.indices.extend([r1, r2, r3]);
+            } else {
+                scratch.indices.extend([r2, r1, r3]);
+            }
+        }
+
+        Ok(())
+    }
+
     fn translate_polygon(
         &self,
-        scratch: &mut ModelScratch,
+        scratch: &mut IntermediatePolygon,
         polygon: &Polygon,
     ) -> SlipstreamResult<()> {
         for call in &polygon.vertex_data_gx.commands {
@@ -204,9 +236,9 @@ impl<'a> ModelVisitor<'a> {
                 GxOpCode::DrawTriangles(DrawOpCode { vertices }) => {
                     self.resolve_triangle_list(scratch, polygon, vertices)?
                 }
-                // GxOpCode::DrawTriangleStrip(DrawOpCode { vertices }) => {
-                //     todo!()
-                // }
+                GxOpCode::DrawTriangleStrip(DrawOpCode { vertices }) => {
+                    self.resolve_triangle_strip(scratch, polygon, vertices)?
+                }
                 _ => tracing::error!("TODO"),
             }
         }
@@ -214,12 +246,14 @@ impl<'a> ModelVisitor<'a> {
         Ok(())
     }
 
-    pub fn translate(&self, arena: &IrArena) -> SlipstreamResult<DrawableModel> {
-        let mut scratch = ModelScratch::default();
-
+    /// Converts the raw buffers to an [`IntermediateModel`].
+    ///
+    /// This intermediate model can then be converted into wgpu buffers and commands
+    /// in the next step.
+    pub fn to_intermediate(&self, arena: &IrArena) -> SlipstreamResult<IntermediateModel> {
         struct PolygonVisitor<'a> {
-            model: &'a ModelVisitor<'a>,
-            scratch: &'a mut ModelScratch,
+            model: &'a ModelTranslator<'a>,
+            scratch: &'a mut IntermediatePolygon,
             result: SlipstreamResult<()>,
         }
 
@@ -227,11 +261,15 @@ impl<'a> ModelVisitor<'a> {
             fn visit_polygon(&mut self, context: VisitorContext<'_, Polygon>) -> ControlFlow<()> {
                 tracing::trace!("Translating `{}`", context.meta.label);
                 self.result = self.model.translate_polygon(self.scratch, context.content);
+
                 ControlFlow::Break(())
             }
         }
 
+        let mut intermediate = Vec::with_capacity(self.polygons.len());
         for &polygon in &self.polygons {
+            let mut scratch = IntermediatePolygon::default();
+
             let mut visitor = PolygonVisitor {
                 model: self,
                 scratch: &mut scratch,
@@ -240,14 +278,16 @@ impl<'a> ModelVisitor<'a> {
             let _ = arena.visit(polygon, &mut visitor);
             visitor.result?;
 
-            dbg!(&scratch);
+            intermediate.push(scratch);
         }
 
-        todo!()
+        Ok(IntermediateModel {
+            polygons: intermediate,
+        })
     }
 }
 
-impl Visitor for ModelVisitor<'_> {
+impl Visitor for ModelTranslator<'_> {
     fn visit_vertices(&mut self, vertices: VisitorContext<'_, VertexBuffer>) -> ControlFlow<()> {
         self.vertices.push(vertices.meta.key);
         ControlFlow::Break(())

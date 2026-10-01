@@ -160,13 +160,10 @@ impl DeserializeContents for VertexBuffer {
                 return Err(CorruptionError {
                     reason: format!("invalid vertex component count: {v} (expected 2 or 3)"),
                     location: Some(reader.position()),
-                    ..Default::default()
                 }
                 .into());
             }
         };
-
-        tracing::debug!("ended at {}", reader.position());
 
         Ok(Self {
             header,

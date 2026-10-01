@@ -1,6 +1,7 @@
 pub mod grid;
+pub mod intermediate;
 pub mod pipeline;
-pub mod translator;
+pub mod wgpu;
 
 use std::{
     hash::Hasher,
@@ -15,8 +16,8 @@ use crate::{
     panes::{
         ContentSignature, Pane, PaneAction,
         viewer::{
+            intermediate::ModelTranslator,
             pipeline::{TEXTURE_FILTER_MODE, ViewerCallback, ViewerPipeline},
-            translator::ModelVisitor,
         },
     },
     shared::{GraphicsState, camera::CameraController},
@@ -42,9 +43,9 @@ impl ViewerPane {
         render_state: GraphicsState,
     ) -> SlipstreamResult<Box<dyn Pane>> {
         let model = mdl0_node
-            .map(|node| ModelVisitor::from_root(node, &arena))
+            .map(|node| ModelTranslator::from_root(node, &arena))
             .transpose()?
-            .map(|model| model.translate(&arena))
+            .map(|model| model.to_intermediate(&arena))
             .transpose()?;
 
         dbg!(&model);
