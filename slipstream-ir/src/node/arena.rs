@@ -6,15 +6,15 @@ use std::{
         atomic::{AtomicU64, Ordering},
     },
 };
-
+use std::ops::ControlFlow;
 use parking_lot::RwLock;
 use slipstream_shared::error::InvalidInputError;
-use slipstream_shared::SlipstreamResult;
+use slipstream_shared::{SlipstreamError, SlipstreamResult};
 use crate::node::{
     guard::ContentReadGuard,
     node::{ContentSlot, IrNode, IrNodeType},
 };
-use crate::visitor::Visitor;
+use crate::visitor::{Visitor, VisitorContextNode};
 
 /// A key that can be used to refer to a node.
 ///
@@ -153,12 +153,29 @@ impl IrArena {
     /// # Errors
     /// This function returns an error if the given root node does not exist.
     pub fn walk(&self, root: IrNodeKey, visitor: &mut dyn Visitor) -> SlipstreamResult<()> {
-        let root = self.map.read().get(&root).ok_or_else(|| InvalidInputError {
+        let root = self.map.read().get(&root).ok_or_else(|| SlipstreamError::from(InvalidInputError {
             reason: format!("root node {root:?} does not exist"),
             ..Default::default()
-        }.into())?;
+        }))?.clone();
 
-        while 
+        let guard = root.read();
+        for &child in &guard.children {
+            tracing::trace!("{:?}", child);
+
+            // Visits the child's contents and returns a control flow.
+            let flow = self.inspect(child, |child| {
+                if let Some(contents) = child.contents.get_or_try_init()? {
+                    return Ok::<_, SlipstreamError>(contents.accept(VisitorContextNode::from(child), visitor))
+                }
+
+                Ok(ControlFlow::Continue(()))
+            }).transpose()?.unwrap_or(ControlFlow::Continue(()));
+
+            if flow.is_continue() {
+                // Walk this node's children only if the visitor wants to continue.
+                self.walk(child, visitor)?;
+            }
+        }
 
         Ok(())
     }

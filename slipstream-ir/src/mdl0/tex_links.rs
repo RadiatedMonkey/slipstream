@@ -10,6 +10,8 @@ use crate::{
     node::node::IrNodeType,
     visitor::{Visitable, Visitor},
 };
+use crate::node::node::IrNode;
+use crate::visitor::{VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
 
 #[derive(Debug, Clone, PartialEq, Inspect)]
 pub struct TextureLink {
@@ -41,12 +43,12 @@ pub struct TextureLinks {
 }
 
 impl Visitable for TextureLinks {
-    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_texture_links(self)
+    fn accept(&self, node: VisitorContextNode<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_texture_links(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_texture_links_mut(self)
+    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_texture_links_mut(VisitorContextMut::new(node, self))
     }
 }
 

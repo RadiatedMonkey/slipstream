@@ -9,8 +9,8 @@ use slipstream_shared::error::{
 use crate::brres::{self, BRRES_MAGIC};
 use crate::encoding::{ReadArrayExt, ReadStringExt};
 use crate::node::arena::{IrArena, IrNodeDescriptor, IrNodeKey};
-use crate::node::node::{ContentSlot, IrNodeType};
-use crate::visitor::{Visitable, Visitor};
+use crate::node::node::{ContentSlot, IrNode, IrNodeType};
+use crate::visitor::{Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
 
 /// Magic of an ARC file.
 pub const ARC_MAGIC: [u8; 4] = [0x55, 0xAA, 0x38, 0x2D];
@@ -150,12 +150,12 @@ pub struct UnknownFile {
 }
 
 impl Visitable for UnknownFile {
-    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_unknown(self)
+    fn accept(&self, node: VisitorContextNode<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_unknown(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_unknown_mut(self)
+    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_unknown_mut(VisitorContextMut::new(node, self))
     }
 }
 
@@ -192,12 +192,12 @@ pub struct ArcDirectory {
 }
 
 impl Visitable for ArcDirectory {
-    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_arc(self)
+    fn accept(&self, node: VisitorContextNode<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_arc(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_arc_mut(self)
+    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_arc_mut(VisitorContextMut::new(node, self))
     }
 }
 

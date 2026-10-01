@@ -6,9 +6,9 @@ use slipstream_shared::error::{CorruptionError, SlipstreamResult};
 
 use crate::encoding::ReadArrayExt;
 use crate::mdl0::section::DeserializeContents;
-use crate::node::node::IrNodeType;
+use crate::node::node::{IrNode, IrNodeType};
 use crate::util::{VectorDivisor, VertexFormat, deserialize_vector_data};
-use crate::visitor::{Visitable, Visitor};
+use crate::visitor::{Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
 
 const COMPONENTS_XY: u32 = 0x0;
 const COMPONENTS_XYZ: u32 = 0x1;
@@ -106,12 +106,12 @@ impl VertexBuffer {
 }
 
 impl Visitable for VertexBuffer {
-    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_vertices(self)
+    fn accept(&self, node: VisitorContextNode<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_vertices(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_vertices_mut(self)
+    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_vertices_mut(VisitorContextMut::new(node, self))
     }
 }
 

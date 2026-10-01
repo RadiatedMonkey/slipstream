@@ -7,8 +7,8 @@ use slipstream_shared::error::{CorruptionError, SlipstreamResult};
 use slipstream_shared::verify;
 
 use crate::mdl0::section::{DeserializeContents, SerializeContents};
-use crate::node::node::IrNodeType;
-use crate::visitor::{Visitable, Visitor};
+use crate::node::node::{IrNode, IrNodeType};
+use crate::visitor::{Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
 
 /// The opcode IDs for the possible commands in the definitions section of an MDL0 file.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, strum::FromRepr)]
@@ -219,12 +219,12 @@ impl Definitions {
 }
 
 impl Visitable for Definitions {
-    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_definitions(self)
+    fn accept(&self, node: VisitorContextNode<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_definitions(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_definitions_mut(self)
+    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_definitions_mut(VisitorContextMut::new(node, self))
     }
 }
 

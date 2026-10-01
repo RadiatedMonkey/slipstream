@@ -26,8 +26,8 @@ use crate::mdl0::tex_links::TextureLinks;
 use crate::mdl0::uvs::UvBuffer;
 use crate::mdl0::vertices::VertexBuffer;
 use crate::node::arena::{IrArena, IrNodeDescriptor, IrNodeKey};
-use crate::node::node::{ContentSlot, IrNodeType};
-use crate::visitor::{Visitable, Visitor};
+use crate::node::node::{ContentSlot, IrNode, IrNodeType};
+use crate::visitor::{Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
 use byteorder::{BigEndian, ReadBytesExt};
 use section::deserialize_leaf_section;
 use slipstream_shared::cursor::RefCursor;
@@ -284,12 +284,12 @@ pub struct Model {
 }
 
 impl Visitable for Model {
-    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_mdl0(self)
+    fn accept(&self, node: VisitorContextNode<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_mdl0(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_mdl0_mut(self)
+    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_mdl0_mut(VisitorContextMut::new(node, self))
     }
 }
 

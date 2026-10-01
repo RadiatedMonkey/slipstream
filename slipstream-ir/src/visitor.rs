@@ -1,5 +1,7 @@
+use std::any::Any;
+use std::marker::PhantomData;
 use std::ops::{ControlFlow, Deref, DerefMut};
-
+use downcast_rs::{impl_downcast, Downcast};
 use crate::{
     arc::{ArcDirectory, UnknownFile},
     mdl0::{
@@ -10,14 +12,38 @@ use crate::{
     },
 };
 use crate::node::arena::IrNodeKey;
+use crate::node::node::{ContentSlot, IrNode, IrNodeType};
 
-pub struct IrNodeContext<'a, T> {
+pub struct VisitorContextNode<'a> {
     pub label: &'a str,
-    pub key: IrNodeKey,
-    pub content: &'a T
+    pub ty: IrNodeType,
+    pub key: IrNodeKey
 }
 
-impl<'a, T> Deref for IrNodeContext<'a, T> {
+impl<'a> From<&'a IrNode> for VisitorContextNode<'a> {
+    #[inline]
+    fn from(node: &'a IrNode) -> Self {
+        Self {
+            label: &node.label,
+            ty: node.ty,
+            key: node.key()
+        }
+    }
+}
+
+pub struct VisitorContext<'a, T> {
+    pub node: VisitorContextNode<'a>,
+    content: &'a T
+}
+
+impl<'a, T> VisitorContext<'a, T> {
+    #[inline]
+    pub(crate) fn new(node: VisitorContextNode<'a>, content: &'a T) -> Self {
+        Self { node, content }
+    }
+}
+
+impl<'a, T> Deref for VisitorContext<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -25,13 +51,36 @@ impl<'a, T> Deref for IrNodeContext<'a, T> {
     }
 }
 
-pub struct IrNodeContextMut<'a, T> {
-    pub label: &'a str,
-    pub key: IrNodeKey,
-    pub content: &'a mut T
+pub struct VisitorContextNodeMut<'a> {
+    pub label: &'a mut String,
+    pub ty: IrNodeType,
+    pub key: IrNodeKey
 }
 
-impl<'a, T> Deref for IrNodeContextMut<'a, T> {
+impl<'a> From<&'a mut IrNode> for VisitorContextNodeMut<'a> {
+    fn from(node: &'a mut IrNode) -> Self {
+        Self {
+            key: node.key(),
+            label: &mut node.label,
+            ty: node.ty,
+        }
+    }
+}
+
+/// The contents can be accessed via the deref implementations.
+pub struct VisitorContextMut<'a, T> {
+    pub node: VisitorContextNodeMut<'a>,
+    content: &'a mut T
+}
+
+impl<'a, T> VisitorContextMut<'a, T> {
+    #[inline]
+    pub(crate) fn new(node: VisitorContextNodeMut<'a>, content: &'a mut T) -> Self {
+        Self { node, content }
+    }
+}
+
+impl<'a, T: 'static> Deref for VisitorContextMut<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -39,7 +88,7 @@ impl<'a, T> Deref for IrNodeContextMut<'a, T> {
     }
 }
 
-impl<'a, T> DerefMut for IrNodeContextMut<'a, T> {
+impl<'a, T: 'static> DerefMut for VisitorContextMut<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.content
     }
@@ -47,97 +96,98 @@ impl<'a, T> DerefMut for IrNodeContextMut<'a, T> {
 
 #[allow(unused_variables)]
 pub trait Visitor {
-    fn visit_arc(&mut self, arc: IrNodeContext<'_, ArcDirectory>) -> ControlFlow<()> {
+    fn visit_arc(&mut self, arc: VisitorContext<'_, ArcDirectory>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_mdl0(&mut self, model: IrNodeContext<'_, mdl0::Model>) -> ControlFlow<()> {
+    fn visit_mdl0(&mut self, model: VisitorContext<'_, mdl0::Model>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_definitions(&mut self, definitions: IrNodeContext<'_, Definitions>) -> ControlFlow<()> {
+    fn visit_definitions(&mut self, definitions: VisitorContext<'_, Definitions>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_bone(&mut self, bone: IrNodeContext<'_, Bone>) -> ControlFlow<()> {
+    fn visit_bone(&mut self, bone: VisitorContext<'_, Bone>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_vertices(&mut self, vertex_buf: IrNodeContext<'_, VertexBuffer>) -> ControlFlow<()> {
+    fn visit_vertices(&mut self, vertex_buf: VisitorContext<'_, VertexBuffer>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_normals(&mut self, normal_buf: IrNodeContext<'_, NormalBuffer>) -> ControlFlow<()> {
+    fn visit_normals(&mut self, normal_buf: VisitorContext<'_, NormalBuffer>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_colors(&mut self, color_buf: IrNodeContext<'_, ColorBuffer>) -> ControlFlow<()> {
+    fn visit_colors(&mut self, color_buf: VisitorContext<'_, ColorBuffer>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_uvs(&mut self, uv_buf: IrNodeContext<'_, UvBuffer>) -> ControlFlow<()> {
+    fn visit_uvs(&mut self, uv_buf: VisitorContext<'_, UvBuffer>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_polygon(&mut self, polygon: IrNodeContext<'_, Polygon>) -> ControlFlow<()> {
+    fn visit_polygon(&mut self, polygon: VisitorContext<'_, Polygon>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_material(&mut self, material: IrNodeContext<'_, MaterialBuffer>) -> ControlFlow<()> {
+    fn visit_material(&mut self, material: VisitorContext<'_, MaterialBuffer>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_tev(&mut self, tev: IrNodeContext<'_, Tev>) -> ControlFlow<()> {
+    fn visit_tev(&mut self, tev: VisitorContext<'_, Tev>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_palette_links(&mut self, links: IrNodeContext<'_, PaletteLinks>) -> ControlFlow<()> {
+    fn visit_palette_links(&mut self, links: VisitorContext<'_, PaletteLinks>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_texture_links(&mut self, links: IrNodeContext<'_, TextureLinks>) -> ControlFlow<()> {
+    fn visit_texture_links(&mut self, links: VisitorContext<'_, TextureLinks>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_unknown(&mut self, unknown: IrNodeContext<'_, UnknownFile>) -> ControlFlow<()> {
+    fn visit_unknown(&mut self, unknown: VisitorContext<'_, UnknownFile>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
 
     // Mutable functions
     // =============================================================================================
     
-    fn visit_arc_mut(&mut self, arc: IrNodeContextMut<'_, ArcDirectory>) -> ControlFlow<()> {
+    fn visit_arc_mut(&mut self, arc: VisitorContextMut<'_, ArcDirectory>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_mdl0_mut(&mut self, model: IrNodeContextMut<'_, mdl0::Model>) -> ControlFlow<()> {
+    fn visit_mdl0_mut(&mut self, model: VisitorContextMut<'_, mdl0::Model>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_definitions_mut(&mut self, definitions: IrNodeContextMut<'_, Definitions>) -> ControlFlow<()> {
+    fn visit_definitions_mut(&mut self, definitions: VisitorContextMut<'_, Definitions>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_bone_mut(&mut self, bone: IrNodeContextMut<'_, Bone>) -> ControlFlow<()> {
+    fn visit_bone_mut(&mut self, bone: VisitorContextMut<'_, Bone>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_vertices_mut(&mut self, vertex_buf: IrNodeContextMut<'_, VertexBuffer>) -> ControlFlow<()> {
+    fn visit_vertices_mut(&mut self, vertex_buf: VisitorContextMut<'_, VertexBuffer>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_normals_mut(&mut self, normal_buf: IrNodeContextMut<'_, NormalBuffer>) -> ControlFlow<()> {
+    fn visit_normals_mut(&mut self, normal_buf: VisitorContextMut<'_, NormalBuffer>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_colors_mut(&mut self, color_buf: IrNodeContextMut<'_, ColorBuffer>) -> ControlFlow<()> {
+    fn visit_colors_mut(&mut self, color_buf: VisitorContextMut<'_, ColorBuffer>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_uvs_mut(&mut self, uv_buf: IrNodeContextMut<'_, UvBuffer>) -> ControlFlow<()> {
+    fn visit_uvs_mut(&mut self, uv_buf: VisitorContextMut<'_, UvBuffer>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_polygon_mut(&mut self, polygon: IrNodeContextMut<'_, Polygon>) -> ControlFlow<()> {
+    fn visit_polygon_mut(&mut self, polygon: VisitorContextMut<'_, Polygon>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_material_mut(&mut self, material: IrNodeContextMut<'_, MaterialBuffer>) -> ControlFlow<()> {
+    fn visit_material_mut(&mut self, material: VisitorContextMut<'_, MaterialBuffer>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_tev_mut(&mut self, tev: IrNodeContextMut<'_, Tev>) -> ControlFlow<()> {
+    fn visit_tev_mut(&mut self, tev: VisitorContextMut<'_, Tev>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_palette_links_mut(&mut self, links: IrNodeContextMut<'_, PaletteLinks>) -> ControlFlow<()> {
+    fn visit_palette_links_mut(&mut self, links: VisitorContextMut<'_, PaletteLinks>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_texture_links_mut(&mut self, links: IrNodeContextMut<'_, TextureLinks>) -> ControlFlow<()> {
+    fn visit_texture_links_mut(&mut self, links: VisitorContextMut<'_, TextureLinks>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
-    fn visit_unknown_mut(&mut self, unknown: IrNodeContextMut<'_, UnknownFile>) -> ControlFlow<()> {
+    fn visit_unknown_mut(&mut self, unknown: VisitorContextMut<'_, UnknownFile>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
 }
 
-pub trait Visitable {
-    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()>;
-    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()>;
+pub trait Visitable: Downcast {
+    fn accept(&self, node: VisitorContextNode, visitor: &mut dyn Visitor) -> ControlFlow<()>;
+    fn accept_mut(&mut self, node: VisitorContextNodeMut, visitor: &mut dyn Visitor) -> ControlFlow<()>;
 }
+impl_downcast!(Visitable);

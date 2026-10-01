@@ -35,11 +35,21 @@ impl ContentSlot {
         }
     }
 
+    #[inline]
     pub fn get(&self) -> Option<&(dyn Visitable + Send + Sync)> {
         match self {
             Self::Eager(Some(x)) => Some(x.as_ref()),
             Self::Eager(None) => None,
             Self::Lazy(lock) => LazyContent::get(lock),
+        }
+    }
+
+    #[inline]
+    pub fn get_mut(&mut self) -> Option<&mut (dyn Visitable + Send + Sync)> {
+        match self {
+            Self::Eager(Some(x)) => Some(x.as_mut()),
+            Self::Eager(None) => None,
+            Self::Lazy(lock) => LazyContent::get_mut(lock)
         }
     }
 

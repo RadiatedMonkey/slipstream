@@ -16,6 +16,8 @@ use crate::{
     node::node::IrNodeType,
     visitor::{Visitable, Visitor},
 };
+use crate::node::node::IrNode;
+use crate::visitor::{VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
 
 #[bitfield(u32)]
 #[derive(PartialEq, Eq)]
@@ -694,12 +696,12 @@ pub struct MaterialBuffer {
 }
 
 impl Visitable for MaterialBuffer {
-    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_material(self)
+    fn accept(&self, node: VisitorContextNode<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_material(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_material_mut(self)
+    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_material_mut(VisitorContextMut::new(node, self))
     }
 }
 

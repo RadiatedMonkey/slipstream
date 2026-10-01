@@ -11,7 +11,7 @@ use eframe::egui_wgpu;
 use slipstream_ir::node::arena::{IrArena, IrNodeKey};
 use slipstream_shared::error::SlipstreamResult;
 
-use crate::panes::viewer::translator::{DrawableModel, ModelScratch};
+use crate::panes::viewer::translator::{ModelVisitor};
 use crate::{
     panes::{
         ContentSignature, Pane, PaneAction,
@@ -26,7 +26,7 @@ pub struct ViewerPane {
     node: Option<IrNodeKey>,
     arena: Arc<IrArena>,
 
-    model: Option<DrawableModel>,
+    model: Option<()>,
     render_state: GraphicsState,
 }
 
@@ -40,7 +40,7 @@ impl ViewerPane {
         render_state: GraphicsState,
     ) -> SlipstreamResult<Box<dyn Pane>> {
         let model = mdl0_node
-            .map(|node| ModelScratch::from_root(node, Arc::clone(&arena)))
+            .map(|node| ModelVisitor::from_root(node, &arena))
             .transpose()?;
 
         let model = None;

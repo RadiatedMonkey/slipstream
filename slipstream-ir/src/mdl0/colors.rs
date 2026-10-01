@@ -13,6 +13,8 @@ use crate::{
     node::node::IrNodeType,
     visitor::{Visitable, Visitor},
 };
+use crate::node::node::IrNode;
+use crate::visitor::{VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ColorComponents {
@@ -233,12 +235,12 @@ pub fn deserialize_color(
 }
 
 impl Visitable for ColorBuffer {
-    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_colors(self)
+    fn accept(&self, node: VisitorContextNode<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_colors(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_colors(self)
+    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_colors_mut(VisitorContextMut::new(node, self))
     }
 }
 

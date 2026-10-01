@@ -2,8 +2,8 @@ use crate::panes::{ContentSignature, Pane, PaneAction};
 use slipstream_ir::mdl0::definitions::Definitions;
 use slipstream_ir::mdl0::tex_links::TextureLinks;
 use slipstream_ir::node::arena::{IrArena, IrNodeKey};
-use slipstream_ir::visitor::{Visitable, Visitor};
-use slipstream_shared::SlipstreamResult;
+use slipstream_ir::visitor::{Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNodeMut};
+use slipstream_shared::{SlipstreamError, SlipstreamResult};
 use slipstream_shared::inspect::Inspect;
 use std::ops::ControlFlow;
 use std::sync::{Arc, mpsc};
@@ -13,11 +13,11 @@ struct InspectorVisitor<'ui> {
 }
 
 impl Visitor for InspectorVisitor<'_> {
-    fn visit_definitions(&mut self, definitions: &Definitions) -> ControlFlow<()> {
+    fn visit_definitions(&mut self, definitions: VisitorContext<'_, Definitions>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
 
-    fn visit_texture_links_mut(&mut self, links: &mut TextureLinks) -> ControlFlow<()> {
+    fn visit_texture_links_mut(&mut self, mut links: VisitorContextMut<'_, TextureLinks>) -> ControlFlow<()> {
         links.draw(&mut |fields| {
             for field in fields {}
         });
@@ -49,24 +49,26 @@ impl InspectorPane {
         })
     }
 
-    fn draw_contents(
-        contents: &mut (dyn Visitable + Send + Sync),
-        ui: &mut egui::Ui,
-    ) -> SlipstreamResult<()> {
-        let mut visitor = InspectorVisitor { ui };
-        let _ = contents.accept_mut(&mut visitor); // ignore the control flow as we're not continuing anyways.
-
-        Ok(())
-    }
-
     fn draw_properties(&mut self, ui: &mut egui::Ui) -> SlipstreamResult<()> {
         self.arena
             .update(self.inspected, |node| {
                 ui.label(format!("Inspecting {} (ID {:?})", node.label, node.key()));
 
+                let context = VisitorContextNodeMut {
+                    key: node.key(),
+                    label: &mut node.label,
+                    ty: node.ty,
+                };
+
                 // Evaluate contents if lazy
                 let contents = node.contents.get_or_try_init_mut()?.unwrap();
-                Self::draw_contents(contents, ui)
+
+                let mut visitor = InspectorVisitor { ui };
+                let _ = contents.accept_mut(context, &mut visitor); // ignore the control flow as we're not continuing anyways.
+
+                todo!();
+
+                Ok::<_, SlipstreamError>(())
             })
             .transpose()?;
 

@@ -13,6 +13,8 @@ use crate::{
     util::{VectorDivisor, VertexFormat, deserialize_scalar_data, deserialize_vector_data},
     visitor::{Visitable, Visitor},
 };
+use crate::node::node::IrNode;
+use crate::visitor::{VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
 
 const COMPONENTS_S: u32 = 0x00;
 const COMPONENTS_ST: u32 = 0x01;
@@ -49,12 +51,12 @@ pub struct UvBuffer {
 }
 
 impl Visitable for UvBuffer {
-    fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_uvs(self)
+    fn accept(&self, node: VisitorContextNode<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_uvs(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_uvs_mut(self)
+    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_uvs_mut(VisitorContextMut::new(node, self))
     }
 }
 
