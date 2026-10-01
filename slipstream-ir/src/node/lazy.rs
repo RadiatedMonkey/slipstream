@@ -2,6 +2,9 @@ use std::{cell::UnsafeCell, fmt, mem::ManuallyDrop, ptr};
 
 use slipstream_shared::{assert::AssertSendSync, cursor::RefCursor};
 
+use crate::mdl0::definitions::Definitions;
+use crate::mdl0::section::DeserializeContents;
+use crate::mdl0::tex_links::TextureLinks;
 use crate::{
     node::{
         node::IrNodeType,
@@ -76,7 +79,7 @@ impl LazyContent {
             impl Drop for PoisonOnPanic<'_> {
                 #[inline]
                 fn drop(&mut self) {
-                    self.0.once.set_state(OnceState::Poisoned);
+                    self.0.once.poison();
                 }
             }
 
@@ -89,7 +92,7 @@ impl LazyContent {
 
             let data = parse_payload(payload.clone());
             guard.0.data.get_mut().content = ManuallyDrop::new(data);
-            guard.0.once.set_state(OnceState::Complete);
+            guard.0.once.complete();
 
             // Ensure the lock does not get poisoned.
             std::mem::forget(guard);
@@ -207,8 +210,16 @@ unsafe impl Sync for LazyContent {}
 unsafe impl Send for LazyContent {}
 
 #[cold]
-fn parse_payload(_payload: DeferPayload) -> Box<DynContent> {
-    todo!()
+fn parse_payload(mut payload: DeferPayload) -> Box<DynContent> {
+    match payload.ty {
+        IrNodeType::Definitions => {
+            Box::new(Definitions::deserialize_contents(&mut payload.reader, 0).unwrap())
+        }
+        IrNodeType::TextureLinks => {
+            Box::new(TextureLinks::deserialize_contents(&mut payload.reader, 0).unwrap())
+        }
+        _ => todo!(),
+    }
 }
 
 #[cold]

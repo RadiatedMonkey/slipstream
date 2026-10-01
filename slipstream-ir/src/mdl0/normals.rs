@@ -5,7 +5,7 @@ use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::{CorruptionError, SlipstreamError, SlipstreamResult};
 
-use crate::mdl0::section::DeserializeSection;
+use crate::mdl0::section::DeserializeContents;
 use crate::node::node::IrNodeType;
 use crate::util::{VectorDivisor, VertexFormat, deserialize_vector_data};
 use crate::visitor::{Visitable, Visitor};
@@ -137,13 +137,17 @@ impl Visitable for NormalBuffer {
     fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_normals(self)
     }
+
+    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_normals_mut(self)
+    }
 }
 
-impl DeserializeSection for NormalBuffer {
+impl DeserializeContents for NormalBuffer {
     const NAME: &str = "Normals";
     const KIND: IrNodeType = IrNodeType::NormalBuffer;
 
-    fn deserialize_section(
+    fn deserialize_contents(
         reader: &mut RefCursor<[u8]>,
         header_start: u64,
     ) -> SlipstreamResult<Self> {

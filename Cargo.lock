@@ -3344,6 +3344,7 @@ name = "slipstream-derive"
 version = "0.1.0"
 dependencies = [
  "darling",
+ "prettyplease",
  "proc-macro2",
  "quote",
  "slipstream-shared",
@@ -3364,6 +3365,7 @@ dependencies = [
  "parking_lot_core",
  "paste",
  "rayon",
+ "slipstream-derive",
  "slipstream-shared",
  "strum",
  "tracing",

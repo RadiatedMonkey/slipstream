@@ -2,10 +2,10 @@ use darling::{FromDeriveInput, FromField};
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::{ToTokens, TokenStreamExt, quote};
-use syn::Result;
 use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 use syn::{Ident, Token, Type, Visibility};
+use syn::{PathSegment, Result};
 
 #[derive(Debug, darling::FromField)]
 #[darling(attributes(inspect))]
@@ -14,6 +14,12 @@ struct FieldOpt {
     pub vis: Visibility,
     pub ty: Type,
 
+    #[darling(default)]
+    pub min: Option<syn::Expr>,
+    #[darling(default)]
+    pub max: Option<syn::Expr>,
+    #[darling(default)]
+    pub read_only: bool,
     #[darling(default)]
     pub category: Option<String>,
     #[darling(default)]
@@ -26,18 +32,72 @@ struct FieldOpt {
 
 impl FieldOpt {
     fn construct_field_value(&self) -> proc_macro2::TokenStream {
-        match &self.ty {
-            Type::Array(ty_array) => {
+        let Self {
+            ident,
+            ty,
+            read_only,
+            min,
+            max,
+            ..
+        } = self;
+
+        let read_only = *read_only;
+        let range = match (min, max) {
+            (None, None) => quote! {
+                // explicit type annotations are required here due to both nones.
+                None
+            },
+            (Some(min), Some(max)) => {
                 quote! {
-                    todo!("field value array")
+                    {
+                        use slipstream_shared::inspect::IntoBounds;
+
+                        // verify that this type support bounds.
+                        const _: () = {
+                            const fn assert_impl<T: ?Sized + IntoBounds<#ty>>() {}
+                            let _ = assert_impl::<#ty>();
+                        };
+                        // #ty is specified twice because we need to both specify the generic and the impl we want to use.
+                        Some(<#ty as IntoBounds::<#ty>>::into_bounds(Some(#min), Some(#max)))
+                    }
                 }
             }
-            Type::Path(ty_path) => {
-                quote! {
-                    todo!("field value ty path")
+            (Some(min), None) => quote! {
+                {
+                    use slipstream_shared::inspect::IntoBounds;
+
+                    // verify that this type support bounds.
+                    const _: () = {
+                        const fn assert_impl<T: ?Sized + IntoBounds<#ty>>() {}
+                        let _ = assert_impl::<#ty>();
+                    };
+                    // #ty is specified twice because we need to both specify the generic and the impl we want to use.
+                    Some(<#ty as IntoBounds::<#ty>>::into_bounds(Some(#min), None))
                 }
+            },
+            (None, Some(max)) => quote! {
+                {
+                    use slipstream_shared::inspect::IntoBounds;
+
+                    // verify that this type support bounds.
+                    const _: () = {
+                        const fn assert_impl<T: ?Sized + IntoBounds<#ty>>() {}
+                        let _ = assert_impl::<#ty>();
+                    };
+                    // #ty is specified twice because we need to both specify the generic and the impl we want to use.
+                    Some(<#ty as IntoBounds::<#ty>>::into_bounds(None, Some(#max)))
+                }
+            },
+        };
+
+        quote! {
+            {
+                use slipstream_shared::inspect::{AsFieldValue, FieldConfig};
+                <#ty as AsFieldValue>::as_field_value(&mut self.#ident, &FieldConfig {
+                    range: #range,
+                    read_only: #read_only
+                })
             }
-            _ => unimplemented!(),
         }
     }
 }
@@ -52,30 +112,34 @@ impl ToTokens for FieldOpt {
             hidden,
             rename,
             with,
+            ..
         } = self;
 
         let is_hidden = hidden.unwrap_or(!matches!(vis, Visibility::Public(_)));
         if !is_hidden {
-            // `rename` takes priority over the actual field name.
-            let name = rename
-                .as_ref()
-                .map(|r| Ident::new(r, rename.span()))
-                .unwrap_or_else(|| {
-                    ident
+            let name = match rename {
+                Some(rename) => quote! { #rename },
+                None => {
+                    let ident = ident
                         .clone()
-                        .unwrap_or_else(|| Ident::new("<unknown>", Span::call_site()))
-                });
+                        .unwrap_or_else(|| Ident::new("<unknown>", Span::call_site()));
+
+                    quote! { stringify!(#ident) }
+                }
+            };
 
             let field_value = self.construct_field_value();
+            let category = category
+                .as_deref()
+                .map(|c| quote! { Some(#c) })
+                .unwrap_or_else(|| quote! { None });
 
             tokens.append_all(quote! {
-                let inspectable = crate::shared::inspect::InspectFieldHelper {
-                    label: stringify!(#name),
+                slipstream_shared::inspect::InspectFieldHelper {
+                    label: #name,
                     category: #category,
                     value: #field_value
-                };
-
-                inspectable.draw(&mut self, ui);
+                }
             });
         }
     }
@@ -106,10 +170,10 @@ impl ToTokens for Input {
 
         let label = label
             .as_ref()
-            .map(|s| Ident::new(&s, Span::call_site()))
+            .map(|s| Ident::new(s, Span::call_site()))
             .unwrap_or(ident.clone());
 
-        let data = data.as_struct().unwrap();
+        let data = data.as_struct().expect("input was not a struct");
         if data.style != darling::ast::Style::Struct {
             panic!(
                 "{}",
@@ -120,13 +184,19 @@ impl ToTokens for Input {
         let fields = &data.fields;
 
         tokens.append_all(quote! {
-            impl crate::shared::inspect::Inspect for #ident {
-                const LABEL: &str = stringify!(#label);
+            /// Automatically generated by the [`Inspect`] derive macro.
+            ///
+            /// This function generates an abstract representation of the current struct
+            // #ty is specified twice because we need to both specify the generic and the impl we want to use.
+            impl slipstream_shared::inspect::Inspect for #ident {
+                #[inline]
+                fn label(&self) -> &str {
+                    stringify!(#ident)
+                }
 
-                fn draw_properties(&self, ui: &mut egui::Ui) -> slipstream_shared::SlipstreamResult<()> {
-                    #(#fields)*
-
-                    Ok(())
+                #[inline]
+                fn draw(&mut self, draw_fn: &mut dyn Fn(&mut [slipstream_shared::inspect::InspectFieldHelper<'_>])) {
+                    draw_fn(&mut [#(#fields),*]);
                 }
             }
         });
@@ -139,45 +209,17 @@ impl ToTokens for Input {
 #[proc_macro_derive(Inspect, attributes(inspect))]
 pub fn derive_inspect(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);
-    let input = Input::from_derive_input(&input).unwrap();
+    let input = Input::from_derive_input(&input).expect("failed to parse input");
+    let tokens = input.into_token_stream();
 
-    input.into_token_stream().into()
-}
-
-struct CategoryInput {
-    pub vis: Visibility,
-    pub ident: Ident,
-    pub enum_token: Token![enum],
-}
-
-impl Parse for CategoryInput {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let vis = input.parse()?;
-        let ident = input.parse()?;
-        let enum_token = input.parse()?;
-
-        Ok(Self {
-            vis,
-            ident,
-            enum_token,
-        })
+    #[cfg(debug_assertions)]
+    {
+        if let Ok(parsed) = syn::parse2::<syn::File>(tokens.clone()) {
+            eprintln!("{}", prettyplease::unparse(&parsed));
+        } else {
+            eprintln!("RAW OUTPUT: {}", tokens.to_string());
+        }
     }
-}
 
-impl ToTokens for CategoryInput {
-    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        let Self { ident, .. } = self;
-
-        tokens.append_all(quote! {
-            impl #ident {
-
-            }
-        });
-    }
-}
-
-#[proc_macro_derive(InspectCategory)]
-pub fn derive_inspect_category(input: TokenStream) -> TokenStream {
-    let input = syn::parse_macro_input!(input as CategoryInput);
-    input.to_token_stream().into()
+    TokenStream::from(tokens)
 }

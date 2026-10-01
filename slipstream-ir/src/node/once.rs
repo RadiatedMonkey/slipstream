@@ -57,8 +57,14 @@ impl Once {
     }
 
     #[inline]
-    pub fn set_state(&self, _state: OnceState) {
-        todo!();
+    pub fn poison(&self) {
+        self.0.store(POISON_BIT, Ordering::Release);
+    }
+
+    #[inline]
+    pub fn complete(&self) {
+        debug_assert_ne!(self.0.load(Ordering::Acquire), LOCKED_BIT, "once was locked");
+        self.0.store(DONE_BIT, Ordering::Release);
     }
 
     /// Performs an initialization routine once and only once. The given closure

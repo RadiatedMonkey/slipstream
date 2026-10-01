@@ -237,6 +237,10 @@ impl Visitable for Bone {
     fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_bone(self)
     }
+
+    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_bone(self)
+    }
 }
 
 /// Builds a nested tree of bones as nodes and returns the root node of the skeleton.

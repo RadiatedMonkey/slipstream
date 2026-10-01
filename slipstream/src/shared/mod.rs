@@ -1,5 +1,4 @@
 pub mod camera;
-pub mod inspect;
 pub mod mem_logger;
 pub mod vertex;
 pub mod wgsl_include;

@@ -1,10 +1,11 @@
 use std::ops::ControlFlow;
 
 use byteorder::{BigEndian, ReadBytesExt};
+use slipstream_derive::Inspect;
 use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::{CorruptionError, SlipstreamResult};
 
-use crate::mdl0::section::DeserializeSection;
+use crate::mdl0::section::DeserializeContents;
 use crate::node::node::IrNodeType;
 use crate::visitor::{Visitable, Visitor};
 
@@ -153,8 +154,6 @@ pub struct Definitions {
 impl Definitions {
     fn read_opcode_id(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<DefinitionOpCodeId> {
         let byte = reader.read_u8()?;
-        dbg!(byte);
-
         DefinitionOpCodeId::from_repr(byte).ok_or_else(|| {
             CorruptionError {
                 reason: String::from("invalid definition opcode ID"),
@@ -169,13 +168,17 @@ impl Visitable for Definitions {
     fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_definitions(self)
     }
+
+    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_definitions_mut(self)
+    }
 }
 
-impl DeserializeSection for Definitions {
+impl DeserializeContents for Definitions {
     const NAME: &str = "Definitions";
     const KIND: IrNodeType = IrNodeType::Definitions;
 
-    fn deserialize_section(
+    fn deserialize_contents(
         reader: &mut RefCursor<[u8]>,
         _header_start: u64,
     ) -> SlipstreamResult<Self> {

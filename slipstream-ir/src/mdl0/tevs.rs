@@ -3,7 +3,7 @@ use std::ops::ControlFlow;
 use crate::encoding::ReadArrayExt;
 use crate::gx::GxBytecode;
 
-use crate::mdl0::section::DeserializeSection;
+use crate::mdl0::section::DeserializeContents;
 use crate::node::node::IrNodeType;
 use crate::visitor::{Visitable, Visitor};
 use byteorder::{BigEndian, ReadBytesExt};
@@ -20,14 +20,18 @@ impl Visitable for Tev {
     fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_tev(self)
     }
+
+    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_tev_mut(self)
+    }
 }
 
-impl DeserializeSection for Tev {
+impl DeserializeContents for Tev {
     const NAME: &str = "Shaders";
     const KIND: IrNodeType = IrNodeType::Tevs;
 
     #[tracing::instrument(skip_all, fields(header_start = _header_start))]
-    fn deserialize_section(
+    fn deserialize_contents(
         reader: &mut RefCursor<[u8]>,
         _header_start: u64,
     ) -> SlipstreamResult<Self> {

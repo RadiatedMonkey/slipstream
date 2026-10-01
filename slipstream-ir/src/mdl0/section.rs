@@ -7,24 +7,27 @@ use crate::{
         node::{ContentSlot, IrNodeType},
     },
 };
+use crate::mdl0::definitions::Definitions;
+use crate::mdl0::SectionType;
 
-pub trait DeserializeSection: Sized {
+pub trait DeserializeContents: Sized {
     const NAME: &str;
     const KIND: IrNodeType;
 
-    fn deserialize_section(
+    fn deserialize_contents(
         reader: &mut RefCursor<[u8]>,
         header_start: u64,
     ) -> SlipstreamResult<Self>;
 }
 
-/// Deserializes an MDL0 section (normals, vertices, etc) that has a simple layout.
+/// Lazily deserializes an MDL0 section (normals, vertices, etc) that has a simple layout.
+/// The contents are not read and will be lazily evaluated using [`deserialize_leaf_contents`].
 ///
 /// This function returns the key to the deserialized section node.
 ///
 /// This means that the entries do not have any subfiles (such as the hierarchical layout of the bones).
 #[tracing::instrument(skip_all)]
-pub fn deserialize_leaf_section<T: DeserializeSection>(
+pub fn deserialize_leaf_section<T: DeserializeContents>(
     reader: &mut RefCursor<[u8]>,
     _header_start: u32,
     parent: IrNodeKey,

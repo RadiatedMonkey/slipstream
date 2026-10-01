@@ -6,7 +6,7 @@ use slipstream_shared::{
     error::{CorruptionError, InvalidInputError, SlipstreamError, SlipstreamResult},
 };
 
-use crate::mdl0::section::DeserializeSection;
+use crate::mdl0::section::DeserializeContents;
 use crate::{
     encoding::ReadArrayExt,
     gx::{
@@ -212,14 +212,18 @@ impl Visitable for Polygon {
     fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_polygon(self)
     }
+
+    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_polygon_mut(self)
+    }
 }
 
-impl DeserializeSection for Polygon {
+impl DeserializeContents for Polygon {
     const NAME: &str = "Polygons";
     const KIND: IrNodeType = IrNodeType::Polygon;
 
     #[tracing::instrument(skip_all, fields(header_start = _header_start))]
-    fn deserialize_section(
+    fn deserialize_contents(
         reader: &mut RefCursor<[u8]>,
         _header_start: u64,
     ) -> SlipstreamResult<Self> {

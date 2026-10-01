@@ -7,7 +7,7 @@ use slipstream_shared::{
     error::{CorruptionError, InvalidInputError, SlipstreamError, SlipstreamResult},
 };
 
-use crate::mdl0::section::DeserializeSection;
+use crate::mdl0::section::DeserializeContents;
 use crate::{
     encoding::ReadArrayExt,
     node::node::IrNodeType,
@@ -236,13 +236,17 @@ impl Visitable for ColorBuffer {
     fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_colors(self)
     }
+
+    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_colors(self)
+    }
 }
 
-impl DeserializeSection for ColorBuffer {
+impl DeserializeContents for ColorBuffer {
     const NAME: &str = "Colors";
     const KIND: IrNodeType = IrNodeType::ColorBuffer;
 
-    fn deserialize_section(
+    fn deserialize_contents(
         reader: &mut RefCursor<[u8]>,
         _header_start: u64,
     ) -> SlipstreamResult<Self> {

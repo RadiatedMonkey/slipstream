@@ -8,7 +8,7 @@ use slipstream_shared::{
     error::{CorruptionError, SlipstreamError, SlipstreamResult},
 };
 
-use crate::mdl0::section::DeserializeSection;
+use crate::mdl0::section::DeserializeContents;
 use crate::{
     encoding::ReadArrayExt,
     gx::load_bp::{AlphaFunction, BlendMode, ConstantAlpha, DepthTest, LoadBpOpCode},
@@ -613,13 +613,17 @@ impl Visitable for MaterialBuffer {
     fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_material(self)
     }
+
+    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_material_mut(self)
+    }
 }
 
-impl DeserializeSection for MaterialBuffer {
+impl DeserializeContents for MaterialBuffer {
     const NAME: &str = "Materials";
     const KIND: IrNodeType = IrNodeType::Material;
 
-    fn deserialize_section(
+    fn deserialize_contents(
         reader: &mut RefCursor<[u8]>,
         _header_start: u64,
     ) -> SlipstreamResult<Self> {

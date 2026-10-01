@@ -5,7 +5,7 @@ use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::{CorruptionError, SlipstreamResult};
 
 use crate::encoding::ReadArrayExt;
-use crate::mdl0::section::DeserializeSection;
+use crate::mdl0::section::DeserializeContents;
 use crate::node::node::IrNodeType;
 use crate::util::{VectorDivisor, VertexFormat, deserialize_vector_data};
 use crate::visitor::{Visitable, Visitor};
@@ -109,14 +109,18 @@ impl Visitable for VertexBuffer {
     fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_vertices(self)
     }
+
+    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_vertices_mut(self)
+    }
 }
 
-impl DeserializeSection for VertexBuffer {
+impl DeserializeContents for VertexBuffer {
     const NAME: &str = "Vertices";
     const KIND: IrNodeType = IrNodeType::VertexBuffer;
 
     #[tracing::instrument(skip_all, fields(header_start))]
-    fn deserialize_section(
+    fn deserialize_contents(
         reader: &mut RefCursor<[u8]>,
         header_start: u64,
     ) -> SlipstreamResult<Self> {

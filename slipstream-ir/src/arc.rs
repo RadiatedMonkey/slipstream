@@ -153,6 +153,10 @@ impl Visitable for UnknownFile {
     fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_unknown(self)
     }
+
+    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_unknown_mut(self)
+    }
 }
 
 fn parse_leaf_node(
@@ -190,6 +194,10 @@ pub struct ArcDirectory {
 impl Visitable for ArcDirectory {
     fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_arc(self)
+    }
+
+    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_arc_mut(self)
     }
 }
 

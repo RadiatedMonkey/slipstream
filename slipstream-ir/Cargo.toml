@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+slipstream-derive = { path = "../slipstream-derive" }
 slipstream-shared = { path = "../slipstream-shared" }
 
 byteorder = "1.5.0"

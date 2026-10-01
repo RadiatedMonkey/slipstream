@@ -287,6 +287,10 @@ impl Visitable for Model {
     fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_mdl0(self)
     }
+
+    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_mdl0_mut(self)
+    }
 }
 
 #[tracing::instrument(skip_all, fields(name, parent_id))]

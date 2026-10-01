@@ -3,7 +3,7 @@ use std::ops::ControlFlow;
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::{cursor::RefCursor, error::SlipstreamResult};
 
-use crate::mdl0::section::DeserializeSection;
+use crate::mdl0::section::DeserializeContents;
 use crate::{
     node::node::IrNodeType,
     visitor::{Visitable, Visitor},
@@ -33,14 +33,18 @@ impl Visitable for PaletteLinks {
     fn accept(&self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
         visitor.visit_palette_links(self)
     }
+
+    fn accept_mut(&mut self, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_palette_links_mut(self)
+    }
 }
 
-impl DeserializeSection for PaletteLinks {
+impl DeserializeContents for PaletteLinks {
     const NAME: &str = "Palette links";
     const KIND: IrNodeType = IrNodeType::PaletteLinks;
 
     #[tracing::instrument(skip_all, fields(header_start = _header_start))]
-    fn deserialize_section(
+    fn deserialize_contents(
         reader: &mut RefCursor<[u8]>,
         _header_start: u64,
     ) -> SlipstreamResult<Self> {
