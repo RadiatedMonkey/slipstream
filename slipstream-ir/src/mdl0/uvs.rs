@@ -64,13 +64,13 @@ impl DeserializeContents for UvBuffer {
     const NAME: &str = "UVs";
     const KIND: IrNodeType = IrNodeType::UvBuffer;
 
-    #[tracing::instrument(skip_all, fields(header_start))]
+    #[tracing::instrument(skip_all)]
     fn deserialize_contents(
-        reader: &mut RefCursor<[u8]>,
-        header_start: u64,
+        reader: &mut RefCursor<[u8]>
     ) -> SlipstreamResult<Self> {
         let _length = reader.read_u32::<BigEndian>()?;
-        let _mdl0_offset = reader.read_i32::<BigEndian>()?;
+        let mdl0_offset_start = reader.position();
+        let mdl0_offset = reader.read_i32::<BigEndian>()?;
         let data_offset = reader.read_i32::<BigEndian>()?;
         let _name_offset = reader.read_i32::<BigEndian>()?;
         let index = reader.read_u32::<BigEndian>()?;
@@ -83,6 +83,7 @@ impl DeserializeContents for UvBuffer {
         let bounding_volume_min = reader.read_f32_array::<2, BigEndian>()?;
         let bounding_volume_max = reader.read_f32_array::<2, BigEndian>()?;
 
+        let header_start = mdl0_offset_start as i64 + mdl0_offset as i64;
         let uv_start = header_start as i64 + data_offset as i64;
         reader.set_position(uv_start as u64);
 

@@ -245,10 +245,9 @@ impl DeserializeContents for Polygon {
     const NAME: &str = "Polygons";
     const KIND: IrNodeType = IrNodeType::Polygon;
 
-    #[tracing::instrument(skip_all, fields(header_start = _header_start))]
+    #[tracing::instrument(skip_all)]
     fn deserialize_contents(
-        reader: &mut RefCursor<[u8]>,
-        _header_start: u64,
+        reader: &mut RefCursor<[u8]>
     ) -> SlipstreamResult<Self> {
         let object_start = reader.position();
         let _length = reader.read_u32::<BigEndian>()?;

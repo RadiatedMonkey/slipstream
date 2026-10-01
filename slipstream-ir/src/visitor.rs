@@ -32,14 +32,14 @@ impl<'a> From<&'a IrNode> for VisitorContextNode<'a> {
 }
 
 pub struct VisitorContext<'a, T> {
-    pub node: VisitorContextNode<'a>,
-    content: &'a T
+    pub meta: VisitorContextNode<'a>,
+    pub content: &'a T
 }
 
 impl<'a, T> VisitorContext<'a, T> {
     #[inline]
     pub(crate) fn new(node: VisitorContextNode<'a>, content: &'a T) -> Self {
-        Self { node, content }
+        Self { meta: node, content }
     }
 }
 
@@ -69,14 +69,14 @@ impl<'a> From<&'a mut IrNode> for VisitorContextNodeMut<'a> {
 
 /// The contents can be accessed via the deref implementations.
 pub struct VisitorContextMut<'a, T> {
-    pub node: VisitorContextNodeMut<'a>,
-    content: &'a mut T
+    pub meta: VisitorContextNodeMut<'a>,
+    pub content: &'a mut T
 }
 
 impl<'a, T> VisitorContextMut<'a, T> {
     #[inline]
     pub(crate) fn new(node: VisitorContextNodeMut<'a>, content: &'a mut T) -> Self {
-        Self { node, content }
+        Self { meta: node, content }
     }
 }
 
@@ -94,6 +94,8 @@ impl<'a, T: 'static> DerefMut for VisitorContextMut<'a, T> {
     }
 }
 
+/// Returning `ControlFlow::Break` from the visitor will end the walk in the current branch.
+/// This means that further children of the node will not be visited.
 #[allow(unused_variables)]
 pub trait Visitor {
     fn visit_arc(&mut self, arc: VisitorContext<'_, ArcDirectory>) -> ControlFlow<()> {

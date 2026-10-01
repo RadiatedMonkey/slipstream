@@ -232,9 +232,9 @@ impl DeserializeContents for Definitions {
     const NAME: &str = "Definitions";
     const KIND: IrNodeType = IrNodeType::Definitions;
 
+    #[tracing::instrument(skip_all)]
     fn deserialize_contents(
-        reader: &mut RefCursor<[u8]>,
-        _header_start: u64,
+        reader: &mut RefCursor<[u8]>
     ) -> SlipstreamResult<Self> {
         let mut commands = Vec::new();
 

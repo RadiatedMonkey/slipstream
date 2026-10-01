@@ -709,9 +709,9 @@ impl DeserializeContents for MaterialBuffer {
     const NAME: &str = "Materials";
     const KIND: IrNodeType = IrNodeType::Material;
 
+    #[tracing::instrument(skip_all)]
     fn deserialize_contents(
-        reader: &mut RefCursor<[u8]>,
-        _header_start: u64,
+        reader: &mut RefCursor<[u8]>
     ) -> SlipstreamResult<Self> {
         let material_start = reader.position();
         let _length = reader.read_u32::<BigEndian>()?;

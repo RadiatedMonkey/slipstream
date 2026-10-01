@@ -72,7 +72,6 @@ pub struct RefCursor<T: ?Sized> {
     inner: Arc<T>,
     /// The current position of the cursor.
     pos: u64,
-    lower_bound: u64,
 }
 
 impl<T: ?Sized> RefCursor<T> {
@@ -80,30 +79,11 @@ impl<T: ?Sized> RefCursor<T> {
         Self {
             inner,
             pos: 0,
-            lower_bound: 0,
         }
     }
 
     pub fn into_inner(self) -> Arc<T> {
         self.inner
-    }
-
-    /// Returns a cursor that only reads the remaining bytes.
-    pub fn tail(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-            pos: 0,
-            lower_bound: self.position(),
-        }
-    }
-
-    /// Cuts everything left of the cursor. The underlying buffer will not be modified, but
-    /// the cursor will not see any of the contents anymore.
-    ///
-    /// The position is reset back to 0.
-    pub fn set_tail(&mut self) {
-        self.lower_bound = self.position();
-        self.pos = 0;
     }
 
     /// The current position of the cursor.
@@ -126,7 +106,7 @@ impl<T: AsRef<[u8]> + ?Sized> RefCursor<T> {
     ///
     /// If the cursor is past the end of the buffer, the remaining buffer will be empty.
     pub fn remaining(&self) -> &[u8] {
-        &self.inner.as_ref().as_ref()[(self.pos + self.lower_bound) as usize..]
+        &self.inner.as_ref().as_ref()[self.pos as usize..]
     }
 
     /// Returns the length of the entire underlying buffer that this cursor has a view into.
@@ -149,8 +129,7 @@ impl<T: ?Sized> Clone for RefCursor<T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
-            pos: self.pos,
-            lower_bound: self.lower_bound,
+            pos: self.pos
         }
     }
 }

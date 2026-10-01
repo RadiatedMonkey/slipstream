@@ -433,3 +433,33 @@ pub fn deserialize(
 
     Ok(mdl_root_key)
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SectionHeader {
+    pub section_start: u64,
+    pub length: u32,
+    pub mdl0_offset: i32,
+    pub data_offset: i32,
+    pub name_offset: i32,
+    pub index: u32
+}
+
+impl SectionHeader {
+    pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
+        let section_start = reader.position();
+        let length = reader.read_u32::<BigEndian>()?;
+        let mdl0_offset = reader.read_i32::<BigEndian>()?;
+        let data_offset = reader.read_i32::<BigEndian>()?;
+        let name_offset = reader.read_i32::<BigEndian>()?;
+        let index = reader.read_u32::<BigEndian>()?;
+
+        Ok(Self {
+            section_start, length, mdl0_offset, data_offset, name_offset, index
+        })
+    }
+
+    #[inline]
+    pub fn get_data_start(&self) -> u64 {
+        (self.section_start as i64 + self.data_offset as i64) as u64
+    }
+}

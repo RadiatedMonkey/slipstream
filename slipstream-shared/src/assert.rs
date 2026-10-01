@@ -52,3 +52,31 @@ macro_rules! verify {
         }
     };
 }
+
+/// Shorthand for
+/// ```ignore
+/// $opt.ok_or_else(|| SlipstreamError::from(AssertFailed {
+///     reason: format!($msg, $args),
+///     location: None
+/// }))
+/// ```
+#[macro_export]
+macro_rules! try_unwrap {
+    ($opt:expr, $msg:expr) => {
+        $opt.ok_or_else(|| $crate::error::SlipstreamError::from(
+            $crate::error::AssertFailed {
+                reason: format!($msg),
+                location: None
+            }
+        ))
+    };
+
+    ($opt:expr, $msg:expr, $($args:tt),+) => {
+        $opt.ok_or_else(|| $crate::error::SlipstreamError::from(
+            $crate::error::AssertFailed {
+                reason: format!($msg, $($fmt),+),
+                location: None
+            }
+        ))
+    };
+}

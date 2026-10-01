@@ -56,10 +56,9 @@ impl DeserializeContents for TextureLinks {
     const NAME: &str = "Texture links";
     const KIND: IrNodeType = IrNodeType::TextureLinks;
 
-    #[tracing::instrument(skip_all, fields(header_start = _header_start))]
+    #[tracing::instrument(skip_all)]
     fn deserialize_contents(
-        reader: &mut RefCursor<[u8]>,
-        _header_start: u64,
+        reader: &mut RefCursor<[u8]>
     ) -> SlipstreamResult<Self> {
         let link_count = reader.read_u32::<BigEndian>()?;
 

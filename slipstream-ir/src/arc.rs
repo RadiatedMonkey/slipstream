@@ -118,10 +118,12 @@ impl Node {
         let name_offset = reader.read_u24::<BigEndian>()?;
         let data1 = reader.read_u32::<BigEndian>()?;
         let data2 = reader.read_u32::<BigEndian>()?;
-
-        string_pool.set_position(name_offset as u64);
+        
+        let spool_start = string_pool.position();
+        string_pool.set_position(spool_start + name_offset as u64);
 
         let name = string_pool.read_null_string::<BigEndian>()?;
+        string_pool.set_position(spool_start);
 
         tracing::trace!("Discovered node `{name}`");
 
@@ -135,7 +137,6 @@ impl Node {
 
                 let mut data = reader.clone();
                 data.set_position(data_start as u64);
-                data.set_tail();
 
                 NodeContent::File { data }
             }
@@ -299,7 +300,6 @@ pub fn deserialize(
 
         let mut pool = reader.clone();
         pool.set_position(start as u64);
-        pool.set_tail();
 
         pool
     };

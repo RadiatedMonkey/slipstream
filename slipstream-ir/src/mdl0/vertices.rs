@@ -6,9 +6,13 @@ use slipstream_shared::error::{CorruptionError, SlipstreamResult};
 
 use crate::encoding::ReadArrayExt;
 use crate::mdl0::section::DeserializeContents;
+use crate::mdl0::SectionHeader;
 use crate::node::node::{IrNode, IrNodeType};
 use crate::util::{VectorDivisor, VertexFormat, deserialize_vector_data};
-use crate::visitor::{Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
+use crate::visitor::{
+    Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNode,
+    VisitorContextNodeMut,
+};
 
 const COMPONENTS_XY: u32 = 0x0;
 const COMPONENTS_XYZ: u32 = 0x1;
@@ -71,8 +75,7 @@ impl VertexBufData {
 /// [`Shape`]: crate::format::mdl0::shapes::Shape
 #[derive(Debug, Clone, PartialEq)]
 pub struct VertexBuffer {
-    /// The index into the `Vertices` section of this buffer.
-    pub index: u32,
+    pub header: SectionHeader,
     /// The format of the vertices in this buffer.
     pub format: VertexFormat,
     /// The divisor is used to scale vectors at lower quality formats.
@@ -110,7 +113,11 @@ impl Visitable for VertexBuffer {
         visitor.visit_vertices(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+    fn accept_mut(
+        &mut self,
+        node: VisitorContextNodeMut<'_>,
+        visitor: &mut dyn Visitor,
+    ) -> ControlFlow<()> {
         visitor.visit_vertices_mut(VisitorContextMut::new(node, self))
     }
 }
@@ -121,14 +128,9 @@ impl DeserializeContents for VertexBuffer {
 
     #[tracing::instrument(skip_all, fields(header_start))]
     fn deserialize_contents(
-        reader: &mut RefCursor<[u8]>,
-        header_start: u64,
+        reader: &mut RefCursor<[u8]>
     ) -> SlipstreamResult<Self> {
-        let _length = reader.read_u32::<BigEndian>()?;
-        let _mdl0_offset = reader.read_i32::<BigEndian>()?;
-        let data_offset = reader.read_i32::<BigEndian>()?;
-        let _name_offset = reader.read_i32::<BigEndian>()?;
-        let index = reader.read_u32::<BigEndian>()?;
+        let header = SectionHeader::deserialize(reader)?;
         let component_count = reader.read_u32::<BigEndian>()?;
         let format = VertexFormat::deserialize(reader)?;
         let divisor = reader.read_u8()?;
@@ -139,8 +141,7 @@ impl DeserializeContents for VertexBuffer {
 
         tracing::trace!("Reading {vertex_count} vertices");
 
-        let vertices_start = header_start as i64 + data_offset as i64;
-        reader.set_position(vertices_start as u64);
+        reader.set_position(header.get_data_start());
 
         let vertices = match component_count {
             COMPONENTS_XY => VertexBufData::Xy(deserialize_vector_data::<2>(
@@ -168,7 +169,7 @@ impl DeserializeContents for VertexBuffer {
         tracing::debug!("ended at {}", reader.position());
 
         Ok(Self {
-            index,
+            header,
             vertices,
             format,
             divisor,

@@ -1,10 +1,13 @@
 use crate::panes::{ContentSignature, Pane, PaneAction};
 use slipstream_ir::mdl0::definitions::Definitions;
 use slipstream_ir::mdl0::tex_links::TextureLinks;
+use slipstream_ir::mdl0::vertices::VertexBuffer;
 use slipstream_ir::node::arena::{IrArena, IrNodeKey};
-use slipstream_ir::visitor::{Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNodeMut};
-use slipstream_shared::{SlipstreamError, SlipstreamResult};
+use slipstream_ir::visitor::{
+    Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNodeMut,
+};
 use slipstream_shared::inspect::Inspect;
+use slipstream_shared::{SlipstreamError, SlipstreamResult};
 use std::ops::ControlFlow;
 use std::sync::{Arc, mpsc};
 
@@ -13,11 +16,27 @@ struct InspectorVisitor<'ui> {
 }
 
 impl Visitor for InspectorVisitor<'_> {
-    fn visit_definitions(&mut self, definitions: VisitorContext<'_, Definitions>) -> ControlFlow<()> {
+    fn visit_definitions(
+        &mut self,
+        definitions: VisitorContext<'_, Definitions>,
+    ) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
 
-    fn visit_texture_links_mut(&mut self, mut links: VisitorContextMut<'_, TextureLinks>) -> ControlFlow<()> {
+    fn visit_vertices_mut(
+        &mut self,
+        context: VisitorContextMut<'_, VertexBuffer>,
+    ) -> ControlFlow<()> {
+        egui::ScrollArea::vertical().show(self.ui, |ui| {
+            ui.label(format!("{:#?}", context.content));
+        });
+        ControlFlow::Continue(())
+    }
+
+    fn visit_texture_links_mut(
+        &mut self,
+        mut links: VisitorContextMut<'_, TextureLinks>,
+    ) -> ControlFlow<()> {
         links.draw(&mut |fields| {
             for field in fields {}
         });
@@ -65,8 +84,6 @@ impl InspectorPane {
 
                 let mut visitor = InspectorVisitor { ui };
                 let _ = contents.accept_mut(context, &mut visitor); // ignore the control flow as we're not continuing anyways.
-
-                todo!();
 
                 Ok::<_, SlipstreamError>(())
             })

@@ -248,9 +248,9 @@ impl DeserializeContents for ColorBuffer {
     const NAME: &str = "Colors";
     const KIND: IrNodeType = IrNodeType::ColorBuffer;
 
+    #[tracing::instrument(skip_all)]
     fn deserialize_contents(
-        reader: &mut RefCursor<[u8]>,
-        _header_start: u64,
+        reader: &mut RefCursor<[u8]>
     ) -> SlipstreamResult<Self> {
         let _length = reader.read_u32::<BigEndian>()?;
         let _mdl0_offset = reader.read_i32::<BigEndian>()?;

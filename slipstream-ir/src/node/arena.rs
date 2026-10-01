@@ -1,3 +1,12 @@
+use crate::node::{
+    guard::ContentReadGuard,
+    node::{ContentSlot, IrNode, IrNodeType},
+};
+use crate::visitor::{Visitor, VisitorContextNode};
+use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLock};
+use slipstream_shared::error::InvalidInputError;
+use slipstream_shared::{SlipstreamError, SlipstreamResult};
+use std::ops::ControlFlow;
 use std::{
     collections::HashMap,
     num::NonZeroU64,
@@ -6,15 +15,6 @@ use std::{
         atomic::{AtomicU64, Ordering},
     },
 };
-use std::ops::ControlFlow;
-use parking_lot::RwLock;
-use slipstream_shared::error::InvalidInputError;
-use slipstream_shared::{SlipstreamError, SlipstreamResult};
-use crate::node::{
-    guard::ContentReadGuard,
-    node::{ContentSlot, IrNode, IrNodeType},
-};
-use crate::visitor::{Visitor, VisitorContextNode};
 
 /// A key that can be used to refer to a node.
 ///
@@ -123,6 +123,26 @@ impl IrArena {
         self.map.read().get(&key).map(ContentReadGuard::new)
     }
 
+    pub fn get_guard(&self, key: IrNodeKey) -> Option<ArcRwLockReadGuard<RawRwLock, IrNode>> {
+        self.map.read().get(&key).map(|lock| lock.read_arc())
+    }
+
+    pub fn visit(&self, key: IrNodeKey, visitor: &mut dyn Visitor) -> SlipstreamResult<()> {
+        let guard = self.map.read();
+        guard
+            .get(&key)
+            .map(|lock| {
+                let guard = lock.read();
+                if let Some(content) = guard.contents.get_or_try_init()? {
+                    let _ = content.accept(VisitorContextNode::from(&*guard), visitor);
+                }
+
+                Ok::<_, SlipstreamError>(())
+            })
+            .transpose()?;
+        Ok(())
+    }
+
     /// Loads the given node and runs `inspect_fn` with a shared reference to it.
     pub fn inspect<T, F>(&self, key: IrNodeKey, inspect_fn: F) -> Option<T>
     where
@@ -153,23 +173,35 @@ impl IrArena {
     /// # Errors
     /// This function returns an error if the given root node does not exist.
     pub fn walk(&self, root: IrNodeKey, visitor: &mut dyn Visitor) -> SlipstreamResult<()> {
-        let root = self.map.read().get(&root).ok_or_else(|| SlipstreamError::from(InvalidInputError {
-            reason: format!("root node {root:?} does not exist"),
-            ..Default::default()
-        }))?.clone();
+        let root = self
+            .map
+            .read()
+            .get(&root)
+            .ok_or_else(|| {
+                SlipstreamError::from(InvalidInputError {
+                    reason: format!("root node {root:?} does not exist"),
+                    ..Default::default()
+                })
+            })?
+            .clone();
 
         let guard = root.read();
         for &child in &guard.children {
             tracing::trace!("{:?}", child);
 
             // Visits the child's contents and returns a control flow.
-            let flow = self.inspect(child, |child| {
-                if let Some(contents) = child.contents.get_or_try_init()? {
-                    return Ok::<_, SlipstreamError>(contents.accept(VisitorContextNode::from(child), visitor))
-                }
+            let flow = self
+                .inspect(child, |child| {
+                    if let Some(contents) = child.contents.get_or_try_init()? {
+                        return Ok::<_, SlipstreamError>(
+                            contents.accept(VisitorContextNode::from(child), visitor),
+                        );
+                    }
 
-                Ok(ControlFlow::Continue(()))
-            }).transpose()?.unwrap_or(ControlFlow::Continue(()));
+                    Ok(ControlFlow::Continue(()))
+                })
+                .transpose()?
+                .unwrap_or(ControlFlow::Continue(()));
 
             if flow.is_continue() {
                 // Walk this node's children only if the visitor wants to continue.

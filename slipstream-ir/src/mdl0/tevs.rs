@@ -30,10 +30,9 @@ impl DeserializeContents for Tev {
     const NAME: &str = "Shaders";
     const KIND: IrNodeType = IrNodeType::Tevs;
 
-    #[tracing::instrument(skip_all, fields(header_start = _header_start))]
+    #[tracing::instrument(skip_all)]
     fn deserialize_contents(
-        reader: &mut RefCursor<[u8]>,
-        _header_start: u64,
+        reader: &mut RefCursor<[u8]>
     ) -> SlipstreamResult<Self> {
         let _length = reader.read_u32::<BigEndian>()?;
         let _mdl0_offset = reader.read_i32::<BigEndian>()?;

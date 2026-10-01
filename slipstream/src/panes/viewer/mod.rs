@@ -11,11 +11,13 @@ use eframe::egui_wgpu;
 use slipstream_ir::node::arena::{IrArena, IrNodeKey};
 use slipstream_shared::error::SlipstreamResult;
 
-use crate::panes::viewer::translator::{ModelVisitor};
 use crate::{
     panes::{
         ContentSignature, Pane, PaneAction,
-        viewer::pipeline::{TEXTURE_FILTER_MODE, ViewerCallback, ViewerPipeline},
+        viewer::{
+            pipeline::{TEXTURE_FILTER_MODE, ViewerCallback, ViewerPipeline},
+            translator::ModelVisitor,
+        },
     },
     shared::{GraphicsState, camera::CameraController},
 };
@@ -41,8 +43,11 @@ impl ViewerPane {
     ) -> SlipstreamResult<Box<dyn Pane>> {
         let model = mdl0_node
             .map(|node| ModelVisitor::from_root(node, &arena))
+            .transpose()?
+            .map(|model| model.translate(&arena))
             .transpose()?;
 
+        dbg!(&model);
         let model = None;
 
         let pipeline = ViewerPipeline::new(render_state.clone());

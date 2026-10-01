@@ -158,12 +158,13 @@ impl DeserializeContents for NormalBuffer {
     const NAME: &str = "Normals";
     const KIND: IrNodeType = IrNodeType::NormalBuffer;
 
+    #[tracing::instrument(skip_all)]
     fn deserialize_contents(
-        reader: &mut RefCursor<[u8]>,
-        header_start: u64,
+        reader: &mut RefCursor<[u8]>
     ) -> SlipstreamResult<Self> {
         let _length = reader.read_u32::<BigEndian>()?;
-        let _mdl0_offset = reader.read_i32::<BigEndian>()?;
+        let mdl0_offset_start = reader.position();
+        let mdl0_offset = reader.read_i32::<BigEndian>()?;
         let data_offset = reader.read_i32::<BigEndian>()?;
         let _name_offset = reader.read_i32::<BigEndian>()?;
         let index = reader.read_u32::<BigEndian>()?;
@@ -173,6 +174,7 @@ impl DeserializeContents for NormalBuffer {
         let stride = reader.read_u8()?;
         let normal_count = reader.read_u16::<BigEndian>()?;
 
+        let header_start = mdl0_offset_start as i64 + mdl0_offset as i64;
         let normals_start = header_start as i64 + data_offset as i64;
         reader.set_position(normals_start as u64);
 
