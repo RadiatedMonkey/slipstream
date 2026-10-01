@@ -11,7 +11,7 @@ use eframe::egui_wgpu;
 use slipstream_ir::node::arena::{IrArena, IrNodeKey};
 use slipstream_shared::error::SlipstreamResult;
 
-use crate::panes::viewer::translator::DrawableModel;
+use crate::panes::viewer::translator::{DrawableModel, ModelScratch};
 use crate::{
     panes::{
         ContentSignature, Pane, PaneAction,
@@ -39,11 +39,9 @@ impl ViewerPane {
         arena: Arc<IrArena>,
         render_state: GraphicsState,
     ) -> SlipstreamResult<Box<dyn Pane>> {
-        // let model = mdl0_node
-        //     .map(|node| ModelScratch::from_root(node, Arc::clone(&arena)))
-        //     .transpose()?
-        //     .map(|bufs| bufs.resolve_shapes(&render_state.device))
-        //     .transpose()?;
+        let model = mdl0_node
+            .map(|node| ModelScratch::from_root(node, Arc::clone(&arena)))
+            .transpose()?;
 
         let model = None;
 
@@ -138,6 +136,12 @@ impl Pane for ViewerPane {
 
             let response = ui.add(image_widget);
             if response.dragged() {
+                tracing::debug!(
+                    "moving image {:?}, pane {:?}",
+                    pipeline.screen_texture_state.egui_texture_id,
+                    self.content_sig
+                );
+
                 let drag_delta = response.drag_delta();
 
                 pipeline

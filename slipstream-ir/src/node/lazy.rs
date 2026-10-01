@@ -138,7 +138,7 @@ impl LazyContent {
             data.content = ManuallyDrop::new(value);
 
             Ok(())
-        });
+        })?;
 
         // SAFETY:
         // There are four possible scenarios:

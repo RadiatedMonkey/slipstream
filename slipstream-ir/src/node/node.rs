@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 
+use slipstream_shared::SlipstreamResult;
 use slipstream_shared::cursor::RefCursor;
 
 use crate::node::arena::IrNodeKey;
@@ -43,20 +44,22 @@ impl ContentSlot {
     }
 
     /// Forces the slot to be parsed, returning a reference to the content.
-    pub fn get_or_init(&self) -> Option<&(dyn Visitable + Send + Sync)> {
-        match self {
+    pub fn get_or_try_init(&self) -> SlipstreamResult<Option<&(dyn Visitable + Send + Sync)>> {
+        Ok(match self {
             Self::Eager(Some(x)) => Some(x.as_ref()),
             Self::Eager(None) => None,
-            Self::Lazy(lock) => Some(LazyContent::try_force(lock)),
-        }
+            Self::Lazy(lock) => Some(LazyContent::try_force(lock)?),
+        })
     }
 
-    pub fn get_or_init_mut(&mut self) -> Option<&mut (dyn Visitable + Send + Sync)> {
-        match self {
+    pub fn get_or_try_init_mut(
+        &mut self,
+    ) -> SlipstreamResult<Option<&mut (dyn Visitable + Send + Sync)>> {
+        Ok(match self {
             Self::Eager(Some(x)) => Some(x.as_mut()),
             Self::Eager(None) => None,
-            Self::Lazy(lock) => Some(LazyContent::try_force_mut(lock)),
-        }
+            Self::Lazy(lock) => Some(LazyContent::try_force_mut(lock)?),
+        })
     }
 }
 

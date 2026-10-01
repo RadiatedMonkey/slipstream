@@ -11,8 +11,6 @@ use crate::{
     panes::{ContentSignature, Pane, PaneAction, PaneId, RequestNewPane},
 };
 
-
-
 /// The outliner displays a file tree.
 ///
 /// It only needs a root node and to start from and will explore and draw the rest
@@ -61,16 +59,28 @@ impl OutlinerPane {
             todo!("rename");
         }
 
+        // Only draw the open in 3D viewer button for MDL0 roots.
+        if node.ty == IrNodeType::Mdl0Root {
+            if ui.button("Open in 3D viewer").clicked() {
+                self.cmd_sender
+                    .send(PaneAction::RequestNewPane(RequestNewPane::Viewer {
+                        viewed: Some(node.key()),
+                    }))?;
+            }
+        }
+
         if ui.button("Open in new outliner").clicked() {
-            self.cmd_sender.send(PaneAction::RequestNewPane(RequestNewPane::Outliner {
-                root: node.key()
-            }))?;
+            self.cmd_sender
+                .send(PaneAction::RequestNewPane(RequestNewPane::Outliner {
+                    root: node.key(),
+                }))?;
         }
 
         if ui.button("Properties").clicked() {
-            self.cmd_sender.send(PaneAction::RequestNewPane(RequestNewPane::Inspector {
-                inspected: node.key()
-            }))?;
+            self.cmd_sender
+                .send(PaneAction::RequestNewPane(RequestNewPane::Inspector {
+                    inspected: node.key(),
+                }))?;
         }
 
         Ok(())

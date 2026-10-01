@@ -8,11 +8,13 @@ use std::{
 };
 
 use parking_lot::RwLock;
-
+use slipstream_shared::error::InvalidInputError;
+use slipstream_shared::SlipstreamResult;
 use crate::node::{
     guard::ContentReadGuard,
     node::{ContentSlot, IrNode, IrNodeType},
 };
+use crate::visitor::Visitor;
 
 /// A key that can be used to refer to a node.
 ///
@@ -143,6 +145,22 @@ impl IrArena {
             let mut guard = lock.write();
             update_fn(&mut guard)
         })
+    }
+
+    /// Walks the entire tree from a root node. This function forces any lazy nodes it encounters
+    /// to be evaluated.
+    ///
+    /// # Errors
+    /// This function returns an error if the given root node does not exist.
+    pub fn walk(&self, root: IrNodeKey, visitor: &mut dyn Visitor) -> SlipstreamResult<()> {
+        let root = self.map.read().get(&root).ok_or_else(|| InvalidInputError {
+            reason: format!("root node {root:?} does not exist"),
+            ..Default::default()
+        }.into())?;
+
+        while 
+
+        Ok(())
     }
 }
 

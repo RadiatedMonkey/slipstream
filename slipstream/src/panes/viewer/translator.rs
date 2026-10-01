@@ -5,6 +5,7 @@ use slipstream_ir::mdl0::polygon::Polygon;
 use slipstream_ir::node::arena::{IrArena, IrNodeKey};
 use slipstream_ir::node::node::IrNodeType;
 use slipstream_shared::error::{InvalidInputError, SlipstreamError, SlipstreamResult};
+use slipstream_shared::verify;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -543,6 +544,7 @@ impl ModelScratch {
     //     Ok(model)
     // }
 
+    /// Constructs a scratch buffer from an MDL0 root node.
     #[tracing::instrument(skip_all, fields(node))]
     pub fn from_root(root: IrNodeKey, map: Arc<IrArena>) -> SlipstreamResult<Self> {
         tracing::trace!("Constructing model buffer block from MDL0 file");

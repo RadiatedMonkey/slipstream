@@ -3,10 +3,10 @@ use slipstream_ir::mdl0::definitions::Definitions;
 use slipstream_ir::mdl0::tex_links::TextureLinks;
 use slipstream_ir::node::arena::{IrArena, IrNodeKey};
 use slipstream_ir::visitor::{Visitable, Visitor};
-use slipstream_shared::{SlipstreamResult};
+use slipstream_shared::SlipstreamResult;
+use slipstream_shared::inspect::Inspect;
 use std::ops::ControlFlow;
 use std::sync::{Arc, mpsc};
-use slipstream_shared::inspect::Inspect;
 
 struct InspectorVisitor<'ui> {
     pub ui: &'ui mut egui::Ui,
@@ -19,9 +19,7 @@ impl Visitor for InspectorVisitor<'_> {
 
     fn visit_texture_links_mut(&mut self, links: &mut TextureLinks) -> ControlFlow<()> {
         links.draw(&mut |fields| {
-            for field in fields {
-
-            }
+            for field in fields {}
         });
 
         ControlFlow::Continue(())
@@ -67,7 +65,7 @@ impl InspectorPane {
                 ui.label(format!("Inspecting {} (ID {:?})", node.label, node.key()));
 
                 // Evaluate contents if lazy
-                let contents = node.contents.get_or_init_mut().unwrap();
+                let contents = node.contents.get_or_try_init_mut()?.unwrap();
                 Self::draw_contents(contents, ui)
             })
             .transpose()?;
