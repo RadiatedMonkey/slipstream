@@ -1,9 +1,10 @@
 use std::ops::ControlFlow;
 
 use bitfield_struct::bitenum;
-use byteorder::{BigEndian, ReadBytesExt};
-use slipstream_shared::cursor::RefCursor;
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use slipstream_shared::cursor::{MutCursor, RefCursor};
 use slipstream_shared::error::{CorruptionError, SlipstreamError, SlipstreamResult};
+use slipstream_shared::verify;
 
 use crate::mdl0::section::DeserializeContents;
 use crate::node::node::IrNodeType;
@@ -57,6 +58,16 @@ impl NormalFormat {
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let word = reader.read_u32::<BigEndian>()?;
         Self::try_from(word)
+    }
+
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        verify!(
+            *self != Self::Invalid,
+            "cannot serialize NormalFormat::Invalid"
+        );
+
+        writer.write_u32::<BigEndian>(*self as u32)?;
+        Ok(())
     }
 }
 

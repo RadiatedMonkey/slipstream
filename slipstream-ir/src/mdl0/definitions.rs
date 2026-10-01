@@ -1,11 +1,12 @@
 use std::ops::ControlFlow;
 
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use slipstream_derive::Inspect;
-use slipstream_shared::cursor::RefCursor;
+use slipstream_shared::cursor::{MutCursor, RefCursor, SizeEstimate};
 use slipstream_shared::error::{CorruptionError, SlipstreamResult};
+use slipstream_shared::verify;
 
-use crate::mdl0::section::DeserializeContents;
+use crate::mdl0::section::{DeserializeContents, SerializeContents};
 use crate::node::node::IrNodeType;
 use crate::visitor::{Visitable, Visitor};
 
@@ -43,6 +44,14 @@ impl MapNode {
             matrix_index,
         })
     }
+
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.reserve(4);
+
+        writer.write_u16::<BigEndian>(self.bone_index)?;
+        writer.write_u16::<BigEndian>(self.matrix_index)?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -57,6 +66,13 @@ impl Weight {
         let weight = reader.read_f32::<BigEndian>()?;
 
         Ok(Self { bone_id, weight })
+    }
+
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        // memory is reserved in `Weights` instead.
+        writer.write_u16::<BigEndian>(self.bone_id)?;
+        writer.write_f32::<BigEndian>(self.weight)?;
+        Ok(())
     }
 }
 
@@ -77,6 +93,24 @@ impl Weights {
         }
 
         Ok(Self { weight_id, weights })
+    }
+
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        let weights_len = self.weights.len();
+        verify!(
+            weights_len < u8::MAX as usize,
+            "Weight count {weights_len} exceeds maximum of 255"
+        );
+
+        writer.reserve(2 + 1 + weights_len * 6);
+
+        writer.write_u16::<BigEndian>(self.weight_id)?;
+        writer.write_u8(self.weights.len() as u8)?;
+        for weight in &self.weights {
+            weight.serialize(writer)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -101,6 +135,17 @@ impl Draw {
             bone_index,
             z_index: priority,
         })
+    }
+
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.reserve(7);
+
+        writer.write_u16::<BigEndian>(self.material_index)?;
+        writer.write_u16::<BigEndian>(self.object_index)?;
+        writer.write_u16::<BigEndian>(self.bone_index)?;
+        writer.write_u8(self.z_index)?;
+
+        Ok(())
     }
 }
 
@@ -134,6 +179,15 @@ impl DuplicateMatrix {
         let src = reader.read_u16::<BigEndian>()?;
 
         Ok(Self { dest, src })
+    }
+
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.reserve(4);
+
+        let dest = writer.write_u16::<BigEndian>(self.dest)?;
+        let src = writer.write_u16::<BigEndian>(self.src)?;
+
+        Ok(())
     }
 }
 
@@ -213,5 +267,22 @@ impl DeserializeContents for Definitions {
         }
 
         Ok(Self { commands })
+    }
+}
+
+impl SerializeContents for Definitions {
+    fn serialize_contents(
+        &self,
+        writer: &mut slipstream_shared::cursor::MutCursor,
+    ) -> SlipstreamResult<()> {
+        todo!()
+    }
+}
+
+impl SizeEstimate for Definitions {
+    #[inline]
+    fn estimate_size(&self) -> usize {
+        // I chose 5 bytes as a reasonable average size for commands.
+        self.commands.len() * 5
     }
 }

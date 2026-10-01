@@ -1,7 +1,7 @@
 use bitfield_struct::{bitenum, bitfield};
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use slipstream_shared::{
-    cursor::RefCursor,
+    cursor::{MutCursor, RefCursor, SizeEstimate},
     error::{CorruptionError, SlipstreamResult},
 };
 
@@ -164,17 +164,23 @@ pub enum LoadCpOpCode {
     VatC(CpVatC),
 }
 
+const VCD_LO_OPCODE: u8 = 0x50;
+const VCD_HI_OPCODE: u8 = 0x60;
+const VAT_A_OPCODE: u8 = 0x70;
+const VAT_B_OPCODE: u8 = 0x80;
+const VAT_C_OPCODE: u8 = 0x90;
+
 impl LoadCpOpCode {
     pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let byte = reader.read_u8()?;
         let word = reader.read_u32::<BigEndian>()?;
 
         Ok(match byte {
-            0x50 => Self::VcdLo(CpVcdLo::from_bits(word)),
-            0x60 => Self::VcdHi(CpVcdHi::from_bits(word)),
-            0x70 => Self::VatA(CpVatA::from_bits(word)),
-            0x80 => Self::VatB(CpVatB::from_bits(word)),
-            0x90 => Self::VatC(CpVatC::from_bits(word)),
+            VCD_LO_OPCODE => Self::VcdLo(CpVcdLo::from_bits(word)),
+            VCD_HI_OPCODE => Self::VcdHi(CpVcdHi::from_bits(word)),
+            VAT_A_OPCODE => Self::VatA(CpVatA::from_bits(word)),
+            VAT_B_OPCODE => Self::VatB(CpVatB::from_bits(word)),
+            VAT_C_OPCODE => Self::VatC(CpVatC::from_bits(word)),
             _ => {
                 return Err(CorruptionError {
                     reason: format!("invalid LoadCP subcommand: {byte:#04x}"),
@@ -183,5 +189,38 @@ impl LoadCpOpCode {
                 .into());
             }
         })
+    }
+
+    pub fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        match self {
+            Self::VcdLo(x) => {
+                writer.write_u8(VCD_LO_OPCODE)?;
+                writer.write_u32::<BigEndian>(x.into_bits())?;
+            }
+            Self::VcdHi(x) => {
+                writer.write_u8(VCD_HI_OPCODE)?;
+                writer.write_u32::<BigEndian>(x.into_bits())?;
+            }
+            Self::VatA(x) => {
+                writer.write_u8(VAT_A_OPCODE)?;
+                writer.write_u32::<BigEndian>(x.into_bits())?;
+            }
+            Self::VatB(x) => {
+                writer.write_u8(VAT_B_OPCODE)?;
+                writer.write_u32::<BigEndian>(x.into_bits())?;
+            }
+            Self::VatC(x) => {
+                writer.write_u8(VAT_C_OPCODE)?;
+                writer.write_u32::<BigEndian>(x.into_bits())?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl SizeEstimate for LoadCpOpCode {
+    #[inline]
+    fn estimate_size(&self) -> usize {
+        1 + 4
     }
 }

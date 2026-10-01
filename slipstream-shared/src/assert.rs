@@ -27,3 +27,28 @@ macro_rules! assert_u8 {
         byte
     }};
 }
+
+#[macro_export]
+macro_rules! verify {
+    ($expr:expr, $msg:expr) => {
+        if !$expr {
+            return Err($crate::error::SlipstreamError::from(
+                $crate::error::AssertFailed {
+                    reason: format!($msg),
+                    location: None,
+                },
+            ));
+        }
+    };
+
+    ($expr:expr, $msg:expr, $($fmt:tt)+) => {
+        if !$expr {
+            return Err($crate::error::SlipstreamError::from(
+                $crate::error::AssertFailed {
+                    reason: format!($msg, $($fmt)+),
+                    location: None,
+                },
+            ));
+        }
+    };
+}

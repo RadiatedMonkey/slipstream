@@ -1,7 +1,65 @@
 use std::{
-    io::{self, SeekFrom},
+    io::{self, SeekFrom, Write},
     sync::Arc,
 };
+
+/// Estimates the size of this type when serialized into a buffer.
+/// This is used to preallocate.
+pub trait SizeEstimate {
+    fn estimate_size(&self) -> usize;
+}
+
+#[derive(Default)]
+pub struct MutCursor {
+    inner: Vec<u8>,
+}
+
+impl MutCursor {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn into_inner(self) -> Vec<u8> {
+        self.inner
+    }
+
+    pub fn reserve(&mut self, additional: usize) {
+        self.inner.reserve(additional);
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+}
+
+impl Write for MutCursor {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.write_all(buf)?;
+        Ok(buf.len())
+    }
+
+    #[inline]
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        self.inner.extend_from_slice(buf);
+        Ok(())
+    }
+
+    #[inline]
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        let mut written = 0;
+        for buf in bufs {
+            self.write_all(buf)?;
+            written += buf.len();
+        }
+        Ok(written)
+    }
+
+    #[inline]
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
 
 /// A `RangedCursor` is very similar to the std's [`Cursor`]
 /// but instead stores its contents in a reference counter.

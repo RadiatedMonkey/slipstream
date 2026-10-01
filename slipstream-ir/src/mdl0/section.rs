@@ -1,4 +1,7 @@
-use slipstream_shared::{cursor::RefCursor, error::SlipstreamResult};
+use slipstream_shared::{
+    cursor::{MutCursor, RefCursor},
+    error::SlipstreamResult,
+};
 
 use crate::{
     index::IndexGroup,
@@ -7,8 +10,6 @@ use crate::{
         node::{ContentSlot, IrNodeType},
     },
 };
-use crate::mdl0::definitions::Definitions;
-use crate::mdl0::SectionType;
 
 pub trait DeserializeContents: Sized {
     const NAME: &str;
@@ -18,6 +19,10 @@ pub trait DeserializeContents: Sized {
         reader: &mut RefCursor<[u8]>,
         header_start: u64,
     ) -> SlipstreamResult<Self>;
+}
+
+pub trait SerializeContents {
+    fn serialize_contents(&self, writer: &mut MutCursor) -> SlipstreamResult<()>;
 }
 
 /// Lazily deserializes an MDL0 section (normals, vertices, etc) that has a simple layout.

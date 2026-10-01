@@ -1,9 +1,10 @@
 use std::ops::ControlFlow;
 
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use slipstream_shared::cursor::{MutCursor, SizeEstimate};
 use slipstream_shared::{cursor::RefCursor, error::SlipstreamResult};
 
-use crate::mdl0::section::DeserializeContents;
+use crate::mdl0::section::{DeserializeContents, SerializeContents};
 use crate::{
     node::node::IrNodeType,
     visitor::{Visitable, Visitor},
@@ -21,6 +22,12 @@ impl PaletteLink {
         let offset2 = reader.read_u32::<BigEndian>()?;
 
         Ok(Self { offset1, offset2 })
+    }
+
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(self.offset1)?;
+        writer.write_u32::<BigEndian>(self.offset2)?;
+        Ok(())
     }
 }
 
@@ -56,5 +63,23 @@ impl DeserializeContents for PaletteLinks {
         }
 
         Ok(Self { links })
+    }
+}
+
+impl SerializeContents for PaletteLinks {
+    fn serialize_contents(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(self.links.len() as u32)?;
+
+        for link in &self.links {
+            link.serialize(writer)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl SizeEstimate for PaletteLinks {
+    fn estimate_size(&self) -> usize {
+        4 + self.links.len() * 8
     }
 }

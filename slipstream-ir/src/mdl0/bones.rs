@@ -1,9 +1,9 @@
 use std::ops::ControlFlow;
 
 use bitfield_struct::bitfield;
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use slipstream_shared::{
-    cursor::RefCursor,
+    cursor::{MutCursor, RefCursor},
     error::{CorruptionError, InvalidInputError, SlipstreamError, SlipstreamResult},
 };
 
@@ -95,6 +95,11 @@ impl BillboardSetting {
         let word = reader.read_u32::<BigEndian>()?;
         Self::try_from(word)
     }
+
+    fn serialize(self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(self as u32)?;
+        Ok(())
+    }
 }
 
 /// A bone that already has all its data deserialized but without resolved references.
@@ -102,7 +107,7 @@ impl BillboardSetting {
 /// When constructing the skeleton, a new [`Bone`] is created that contains proper references
 /// to other bones.
 #[derive(Debug, Clone, PartialEq)]
-struct UnresolvedBone {
+pub struct UnresolvedBone {
     pub bone_start: u32,
     pub mdl0_offset: i32,
     pub name_offset: i32,

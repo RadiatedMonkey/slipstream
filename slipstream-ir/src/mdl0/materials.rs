@@ -1,10 +1,10 @@
 use std::ops::ControlFlow;
 
 use bitfield_struct::bitfield;
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use slipstream_shared::{
     assert_u8,
-    cursor::RefCursor,
+    cursor::{MutCursor, RefCursor},
     error::{CorruptionError, SlipstreamError, SlipstreamResult},
 };
 
@@ -34,9 +34,16 @@ pub struct MaterialFlags {
 }
 
 impl MaterialFlags {
+    #[inline]
     pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let word = reader.read_u32::<BigEndian>()?;
         Ok(Self::from_bits(word))
+    }
+
+    #[inline]
+    pub fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(self.into_bits())?;
+        Ok(())
     }
 }
 
@@ -69,9 +76,16 @@ impl TryFrom<u32> for CullMode {
 }
 
 impl CullMode {
+    #[inline]
     pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let word = reader.read_u32::<BigEndian>()?;
         Self::try_from(word)
+    }
+
+    #[inline]
+    pub fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(*self as u32)?;
+        Ok(())
     }
 }
 
@@ -112,9 +126,16 @@ impl TryFrom<u8> for IndirectMethod {
 }
 
 impl IndirectMethod {
+    #[inline]
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let byte = reader.read_u8()?;
         Self::try_from(byte)
+    }
+
+    #[inline]
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(*self as u32)?;
+        Ok(())
     }
 }
 
@@ -134,9 +155,16 @@ pub struct UsedTextureMaps {
 }
 
 impl UsedTextureMaps {
+    #[inline]
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let word = reader.read_u32::<BigEndian>()?;
         Ok(Self::from_bits(word))
+    }
+
+    #[inline]
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(self.into_bits())?;
+        Ok(())
     }
 }
 
@@ -156,9 +184,16 @@ pub struct UsedPalettes {
 }
 
 impl UsedPalettes {
+    #[inline]
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let word = reader.read_u32::<BigEndian>()?;
         Ok(Self::from_bits(word))
+    }
+
+    #[inline]
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(self.into_bits())?;
+        Ok(())
     }
 }
 
@@ -174,9 +209,16 @@ pub struct LayerSettings {
 }
 
 impl LayerSettings {
+    #[inline]
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let word = reader.read_u32::<BigEndian>()?;
         Ok(Self::from_bits(word))
+    }
+
+    #[inline]
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(self.into_bits())?;
+        Ok(())
     }
 }
 
@@ -232,9 +274,16 @@ impl TryFrom<u8> for TextureMapMode {
 }
 
 impl TextureMapMode {
+    #[inline]
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let byte = reader.read_u8()?;
         Self::try_from(byte)
+    }
+
+    #[inline]
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u8(*self as u8)?;
+        Ok(())
     }
 }
 
@@ -286,9 +335,16 @@ pub struct LightingChannelFlags {
 }
 
 impl LightingChannelFlags {
+    #[inline]
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let word = reader.read_u32::<BigEndian>()?;
         Ok(Self::from_bits(word))
+    }
+
+    #[inline]
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(self.into_bits())?;
+        Ok(())
     }
 }
 
@@ -421,9 +477,16 @@ impl TryFrom<u32> for MinificationFilter {
 }
 
 impl MinificationFilter {
+    #[inline]
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let word = reader.read_u32::<BigEndian>()?;
         Self::try_from(word)
+    }
+
+    #[inline]
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(*self as u32)?;
+        Ok(())
     }
 }
 
@@ -452,9 +515,16 @@ impl TryFrom<u32> for MagnificationFilter {
 }
 
 impl MagnificationFilter {
+    #[inline]
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let word = reader.read_u32::<BigEndian>()?;
         Self::try_from(word)
+    }
+
+    #[inline]
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(*self as u32)?;
+        Ok(())
     }
 }
 
@@ -485,9 +555,16 @@ impl TryFrom<u32> for AnisotropyFiltering {
 }
 
 impl AnisotropyFiltering {
+    #[inline]
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let word = reader.read_u32::<BigEndian>()?;
         Self::try_from(word)
+    }
+
+    #[inline]
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(*self as u32)?;
+        Ok(())
     }
 }
 
@@ -518,9 +595,16 @@ impl TryFrom<u32> for WrapMode {
 }
 
 impl WrapMode {
+    #[inline]
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let word = reader.read_u32::<BigEndian>()?;
         Self::try_from(word)
+    }
+
+    #[inline]
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(*self as u32)?;
+        Ok(())
     }
 }
 

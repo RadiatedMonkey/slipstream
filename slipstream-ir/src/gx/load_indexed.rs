@@ -1,6 +1,9 @@
 use bitfield_struct::bitfield;
-use byteorder::{BigEndian, ReadBytesExt};
-use slipstream_shared::{cursor::RefCursor, error::SlipstreamResult};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use slipstream_shared::{
+    cursor::{MutCursor, RefCursor, SizeEstimate},
+    error::SlipstreamResult,
+};
 
 #[bitfield(u32)]
 #[derive(PartialEq, Eq)]
@@ -20,5 +23,17 @@ impl IndexedLoad {
     pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let word = reader.read_u32::<BigEndian>()?;
         Ok(Self::from_bits(word))
+    }
+
+    pub fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(self.into_bits())?;
+        Ok(())
+    }
+}
+
+impl SizeEstimate for IndexedLoad {
+    #[inline]
+    fn estimate_size(&self) -> usize {
+        4
     }
 }

@@ -1,9 +1,10 @@
 use std::ops::ControlFlow;
 
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use slipstream_shared::{
-    cursor::RefCursor,
+    cursor::{MutCursor, RefCursor},
     error::{CorruptionError, InvalidInputError, SlipstreamError, SlipstreamResult},
+    verify,
 };
 
 use crate::mdl0::section::DeserializeContents;
@@ -41,6 +42,21 @@ impl BoneTable {
 
         Ok(Self { entries })
     }
+
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        let entry_count = self.entries.len();
+        verify!(
+            entry_count <= u32::MAX as usize,
+            "cannot serialize {entry_count} bone table entries, max is {}",
+            u32::MAX
+        );
+
+        writer.write_u32::<BigEndian>(entry_count as u32)?;
+        for &entry in &self.entries {
+            writer.write_u16::<BigEndian>(entry)?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -73,6 +89,11 @@ impl PolygonModifier {
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let word = reader.read_u32::<BigEndian>()?;
         Self::try_from(word)
+    }
+
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(*self as u32)?;
+        Ok(())
     }
 }
 

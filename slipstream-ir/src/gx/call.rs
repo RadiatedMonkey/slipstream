@@ -1,5 +1,8 @@
-use byteorder::{BigEndian, ReadBytesExt};
-use slipstream_shared::{cursor::RefCursor, error::SlipstreamResult};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use slipstream_shared::{
+    cursor::{MutCursor, RefCursor, SizeEstimate},
+    error::SlipstreamResult,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallDisplayList {
@@ -13,5 +16,18 @@ impl CallDisplayList {
         let size = reader.read_u32::<BigEndian>()?;
 
         Ok(Self { address, size })
+    }
+
+    pub fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(self.address)?;
+        writer.write_u32::<BigEndian>(self.size)?;
+        Ok(())
+    }
+}
+
+impl SizeEstimate for CallDisplayList {
+    #[inline]
+    fn estimate_size(&self) -> usize {
+        8
     }
 }
