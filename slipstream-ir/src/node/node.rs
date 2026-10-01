@@ -47,7 +47,7 @@ impl ContentSlot {
         match self {
             Self::Eager(Some(x)) => Some(x.as_ref()),
             Self::Eager(None) => None,
-            Self::Lazy(lock) => Some(LazyContent::force(lock)),
+            Self::Lazy(lock) => Some(LazyContent::try_force(lock)),
         }
     }
 
@@ -55,7 +55,7 @@ impl ContentSlot {
         match self {
             Self::Eager(Some(x)) => Some(x.as_mut()),
             Self::Eager(None) => None,
-            Self::Lazy(lock) => Some(LazyContent::force_mut(lock)),
+            Self::Lazy(lock) => Some(LazyContent::try_force_mut(lock)),
         }
     }
 }
