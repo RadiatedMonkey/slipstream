@@ -118,7 +118,7 @@ impl Node {
         let name_offset = reader.read_u24::<BigEndian>()?;
         let data1 = reader.read_u32::<BigEndian>()?;
         let data2 = reader.read_u32::<BigEndian>()?;
-        
+
         let spool_start = string_pool.position();
         string_pool.set_position(spool_start + name_offset as u64);
 
@@ -160,6 +160,7 @@ impl Visitable for UnknownFile {
     }
 }
 
+#[tracing::instrument(skip_all, fields(label))]
 fn parse_leaf_node(
     reader: &mut RefCursor<[u8]>,
     parent_id: IrNodeKey,

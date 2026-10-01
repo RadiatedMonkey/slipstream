@@ -68,6 +68,7 @@ pub fn get_section_count(ty: BFileType, version: u32) -> SlipstreamResult<usize>
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct BrresHeader {
+    pub start: u64,
     pub size: u32,
     pub root_offset: u16,
     pub section_count: u16,
@@ -75,6 +76,8 @@ struct BrresHeader {
 
 impl BrresHeader {
     pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
+        let start = reader.position();
+        
         let magic = reader.read_u8_array::<4>()?;
         if magic != BRRES_MAGIC {
             return Err(IncorrectFormat {
@@ -113,6 +116,7 @@ impl BrresHeader {
         let section_count = reader.read_u16::<BigEndian>()?;
 
         Ok(Self {
+            start,
             root_offset,
             size,
             section_count,
@@ -236,6 +240,7 @@ pub enum BFileType {
     Pat0,
 }
 
+#[tracing::instrument(skip_all, fields(name))]
 fn deserialize_bfile(
     reader: &mut RefCursor<[u8]>,
     parent_id: IrNodeKey,
@@ -266,6 +271,7 @@ fn deserialize_bfile(
 /// Deserializes the contents of NW4R directories.
 ///
 /// These are the actual roots of MDL0, CHR0, ßetc files.
+#[tracing::instrument(skip_all, fields(label))]
 fn deserialize_nw4r_subdirectories(
     reader: &mut RefCursor<[u8]>,
     label: String,
@@ -332,6 +338,7 @@ fn deserialize_nw4r_directories(
 }
 
 /// Deserializes the root of a BRRES file.
+#[tracing::instrument(skip_all, fields(label))]
 pub fn deserialize(
     reader: &mut RefCursor<[u8]>,
     parent_key: Option<IrNodeKey>,
@@ -339,7 +346,7 @@ pub fn deserialize(
     label: String,
 ) -> SlipstreamResult<IrNodeKey> {
     let header = BrresHeader::deserialize(reader)?;
-    reader.set_position(header.root_offset as u64); // Skip to root start
+    reader.set_position(header.start + header.root_offset as u64); // Skip to root start
 
     let _root = RootSection::deserialize(reader)?;
 
@@ -359,106 +366,3 @@ pub fn deserialize(
 
     Ok(brres_key)
 }
-
-// pub fn deserialize(
-//     reader: &mut RefCursor<[u8]>,
-//     parent_id: IrNodeKey,
-//     arena: &IrArena,
-//     name: String,
-// ) -> SlipstreamResult<IrNodeKey> {
-//     let mut reader = reader.clone();
-//     let brres_key = arena.reserve_key();
-//
-//     let arena2 = arena.clone();
-//
-//     let name2 = name.clone();
-//     let parse_brres = move |_data| {
-//         tracing::trace!("Triggered deferred parse of `{name2}`");
-//
-//         let header = BrresHeader::deserialize(&mut reader)?;
-//
-//         // Skip to root start
-//         reader.set_position(header.root_offset as u64);
-//
-//         let _root = RootSection::deserialize(&mut reader)?;
-//         let root_index = IndexGroup::deserialize(&mut reader)?;
-//
-//         let mut directories = Vec::with_capacity(root_index.entries.len());
-//         for subdirectory in &root_index.entries[1..] {
-//             let subdirectory_label = root_index
-//                 .get_entry_name(&mut reader, subdirectory)?
-//                 .to_owned();
-//             let subdirectory_start = root_index.get_entry_data_start(subdirectory);
-//             let subdirectory_key = arena.reserve_key();
-//
-//             tracing::trace!(
-//                 "Discovered folder `{subdirectory_label}` at location {}",
-//                 reader.position()
-//             );
-//
-//             reader.set_position(subdirectory_start);
-//
-//             let subfile_index = IndexGroup::deserialize(&mut reader)?;
-//             let mut subfiles = Vec::with_capacity(subfile_index.entries.len());
-//
-//             // Skip root subfile
-//             for subfile in &subfile_index.entries[1..] {
-//                 let subfile_label = subfile_index
-//                     .get_entry_name(&mut reader, subfile)?
-//                     .to_owned();
-//
-//                 let subfile_start = subfile_index.get_entry_data_start(subfile);
-//
-//                 tracing::trace!(
-//                     "Discovered file `{subdirectory_label}/{subfile_label}` at location `{}`",
-//                     reader.position()
-//                 );
-//
-//                 reader.set_position(subfile_start);
-//
-//                 // Skip over unimplemented formats for testing for now
-//                 {
-//                     let magic = &reader.remaining()[..4];
-//                     if magic != MDL0_MAGIC && magic != Chr0Subfile::MAGIC {
-//                         tracing::error!("SKIPPING {}", String::from_utf8_lossy(magic));
-//                         continue;
-//                     }
-//                 }
-//
-//                 let file =
-//                     tracing::trace_span!("deserialize_subfile", %subdirectory_label, %subfile_label)
-//                         .in_scope(|| {
-//                             deserialize_bfile(&mut reader, subdirectory_key, &arena2, subfile_label)
-//                         })?;
-//
-//                 subfiles.push(file);
-//             }
-//
-//             arena.insert_at(
-//                 subdirectory_key,
-//                 IrNodeDescriptor {
-//                     label: subdirectory_label,
-//                     ty: IrNodeType::BrresDirectory,
-//                     parent: parent_id,
-//                     children: subfiles,
-//                     ..Default::default()
-//                 },
-//             );
-//
-//             directories.push(subdirectory_key);
-//         }
-//
-//         Ok(VirtualNodeBody {
-//             inspectable: None,
-//             children: directories,
-//         })
-//     };
-//
-//     arena.insert_at(brres_key, IrNodeDescriptor {
-//         label: name,
-//         ty: IrNodeType::ArcDirectory { empty:  },
-//
-//     });
-//
-//     Ok(brres_key)
-// }
