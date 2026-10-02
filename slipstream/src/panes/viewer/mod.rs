@@ -18,6 +18,7 @@ use crate::{
         viewer::{
             intermediate::ModelTranslator,
             pipeline::{TEXTURE_FILTER_MODE, ViewerCallback, ViewerPipeline},
+            wgpu::WgpuModel,
         },
     },
     shared::{GraphicsState, camera::CameraController},
@@ -29,7 +30,6 @@ pub struct ViewerPane {
     node: Option<IrNodeKey>,
     arena: Arc<IrArena>,
 
-    model: Option<()>,
     render_state: GraphicsState,
 }
 
@@ -48,10 +48,8 @@ impl ViewerPane {
             .map(|model| model.to_intermediate(&arena))
             .transpose()?;
 
-        dbg!(&model);
-        let model = None;
+        let pipeline = ViewerPipeline::new(render_state.clone(), model)?;
 
-        let pipeline = ViewerPipeline::new(render_state.clone());
         render_state
             .renderer
             .write()
@@ -66,7 +64,6 @@ impl ViewerPane {
             node: mdl0_node,
             arena,
             render_state,
-            model,
         }))
     }
 }
@@ -142,12 +139,6 @@ impl Pane for ViewerPane {
 
             let response = ui.add(image_widget);
             if response.dragged() {
-                tracing::debug!(
-                    "moving image {:?}, pane {:?}",
-                    pipeline.screen_texture_state.egui_texture_id,
-                    self.content_sig
-                );
-
                 let drag_delta = response.drag_delta();
 
                 pipeline

@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    hash::{DefaultHasher, Hash, Hasher},
+};
 
 use crate::panes::viewer::{
     intermediate::IntermediatePolygon,
@@ -6,11 +9,16 @@ use crate::panes::viewer::{
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct PipelineSignature {}
+#[repr(transparent)]
+pub struct PipelineSignature(u64);
 
 impl PipelineSignature {
-    pub fn from_layouts(layout: &[Option<wgpu::VertexBufferLayout<'_>>]) -> Self {
-        todo!()
+    pub fn from_layouts(layouts: &[Option<wgpu::VertexBufferLayout<'_>>]) -> Self {
+        let mut hasher = DefaultHasher::new();
+        for layout in layouts {
+            layout.hash(&mut hasher);
+        }
+        PipelineSignature(hasher.finish())
     }
 }
 
@@ -37,7 +45,11 @@ impl PipelineRegistry {
         }
     }
 
-    pub fn register(&mut self, desc: PipelineDescriptor<'_>) {
+    pub fn get(&self, signature: PipelineSignature) -> Option<&wgpu::RenderPipeline> {
+        self.pipelines.get(&signature).map(|entry| &entry.pipeline)
+    }
+
+    pub fn register(&mut self, desc: PipelineDescriptor<'_>) -> PipelineSignature {
         let signature = PipelineSignature::from_layouts(&desc.vertex_layouts);
         self.pipelines.entry(signature).or_insert_with(|| {
             let module = self
@@ -100,5 +112,7 @@ impl PipelineRegistry {
 
             PipelineEntry { layout, pipeline }
         });
+
+        signature
     }
 }

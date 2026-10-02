@@ -1,8 +1,9 @@
 use eframe::egui_wgpu;
+use slipstream_shared::SlipstreamResult;
 use wgpu::util::DeviceExt;
 
 use crate::{
-    panes::viewer::grid::GridPipeline,
+    panes::viewer::{grid::GridPipeline, intermediate::IntermediateModel, wgpu::WgpuModel},
     shared::{
         GraphicsState,
         camera::{Camera, CameraController, CameraUniformData, OrbitCamera},
@@ -443,11 +444,14 @@ pub struct ViewerPipeline {
     pub camera_state: CameraState,
     pub screen_texture_state: ScreenTextureState,
     pub pipeline_state: PipelineState,
-    pub model_state: ModelState,
+    pub model_state: Option<WgpuModel>,
 }
 
 impl ViewerPipeline {
-    pub fn new(graphics_state: GraphicsState) -> Self {
+    pub fn new(
+        graphics_state: GraphicsState,
+        intermediate_model: Option<IntermediateModel>,
+    ) -> SlipstreamResult<Self> {
         let viewport_size = glam::uvec2(800, 600);
 
         let camera = Camera::Orbit(OrbitCamera {
@@ -463,11 +467,13 @@ impl ViewerPipeline {
         let camera_state = CameraState::new(camera, &graphics_state, viewport_size);
         let screen_texture_state = ScreenTextureState::new(&graphics_state, viewport_size);
         let pipeline_state = PipelineState::new(&graphics_state, &camera_state);
+        let model_state = intermediate_model
+            .map(|model| WgpuModel::from_intermediate(&graphics_state.device, &camera_state, model))
+            .transpose()?;
 
-        let model_state = ModelState::new(&graphics_state);
         let grid = GridPipeline::new(&graphics_state.device, &camera_state.bind_group_layout);
 
-        Self {
+        Ok(Self {
             camera_state,
             screen_texture_state,
             pipeline_state,
@@ -477,7 +483,7 @@ impl ViewerPipeline {
 
             viewport_size,
             graphics_state,
-        }
+        })
     }
 
     pub fn update_size(&mut self, new_size: glam::UVec2) -> bool {
@@ -528,14 +534,18 @@ impl ViewerPipeline {
         self.grid
             .draw(&mut render_pass, &self.camera_state.bind_group);
 
-        render_pass.set_pipeline(&self.pipeline_state.pipeline);
-        render_pass.set_bind_group(0, &self.camera_state.bind_group, &[]);
-        render_pass.set_vertex_buffer(0, self.model_state.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(
-            self.model_state.index_buffer.slice(..),
-            wgpu::IndexFormat::Uint16,
-        );
-        render_pass.draw_indexed(0..36, 0, 0..1);
+        if let Some(model) = &self.model_state {
+            model.draw(&mut render_pass);
+        }
+
+        // render_pass.set_pipeline(&self.pipeline_state.pipeline);
+        // render_pass.set_bind_group(0, &self.camera_state.bind_group, &[]);
+        // render_pass.set_vertex_buffer(0, self.model_state.vertex_buffer.slice(..));
+        // render_pass.set_index_buffer(
+        //     self.model_state.index_buffer.slice(..),
+        //     wgpu::IndexFormat::Uint16,
+        // );
+        // render_pass.draw_indexed(0..36, 0, 0..1);
 
         Vec::new()
     }
