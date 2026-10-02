@@ -189,3 +189,36 @@ impl SizeEstimate for IndexGroup {
             + self.entries.len() * self.entries.first().map(|f| f.estimate_size()).unwrap_or(0)
     }
 }
+
+fn get_highest_bit(mut value: u8) -> u16 {
+    for i in (0..8).rev() {
+        value <<= 1;
+        if
+    }
+
+    0
+}
+
+fn compute_index_id(object: &str, subject: &str) -> u16 {
+    let object = object.as_bytes();
+    let subject = subject.as_bytes();
+
+    if object.len() < subject.len() {
+        let last = subject.len() - 1;
+        return (last as u16) << 3 | get_highest_bit(subject[last]);
+    }
+
+    object
+        .iter()
+        .rev()
+        .zip(subject.iter().rev())
+        .find_map(|(l, f)| {
+            let diff = l ^ f;
+            if diff != 0 {
+                Some(get_highest_bit(diff))
+            } else {
+                None
+            }
+        })
+        .unwrap_or(!0)
+}
