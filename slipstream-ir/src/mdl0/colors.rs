@@ -1,20 +1,23 @@
 use std::ops::ControlFlow;
 
 use bitfield_struct::bitenum;
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use slipstream_shared::{
-    cursor::RefCursor,
+    cursor::{MutCursor, RefCursor},
     error::{CorruptionError, InvalidInputError, SlipstreamError, SlipstreamResult},
+    verify,
 };
 
-use crate::mdl0::section::DeserializeContents;
+use crate::mdl0::{SectionHeader, section::DeserializeContents};
+use crate::node::node::IrNode;
+use crate::visitor::{
+    VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut,
+};
 use crate::{
     encoding::ReadArrayExt,
     node::node::IrNodeType,
     visitor::{Visitable, Visitor},
 };
-use crate::node::node::IrNode;
-use crate::visitor::{VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ColorComponents {
@@ -44,6 +47,11 @@ impl ColorComponents {
     pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let word = reader.read_u32::<BigEndian>()?;
         Self::try_from(word)
+    }
+
+    pub fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(*self as u32)?;
+        Ok(())
     }
 }
 
@@ -100,6 +108,7 @@ pub enum ColorFormat {
 
 impl ColorFormat {
     /// The stride in bytes of the format.
+    #[inline]
     pub const fn stride(&self) -> u32 {
         match self {
             Self::Rgb565 => 2,
@@ -139,6 +148,16 @@ impl ColorFormat {
     pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let word = reader.read_u32::<BigEndian>()?;
         Self::try_from(word)
+    }
+
+    pub fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        verify!(
+            self != ColorFormat::Invalid,
+            "cannot serialize an Invalid color format"
+        );
+
+        writer.write_u32::<BigEndian>(*self as u32)?;
+        Ok(())
     }
 }
 
@@ -239,7 +258,11 @@ impl Visitable for ColorBuffer {
         visitor.visit_colors(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+    fn accept_mut(
+        &mut self,
+        node: VisitorContextNodeMut<'_>,
+        visitor: &mut dyn Visitor,
+    ) -> ControlFlow<()> {
         visitor.visit_colors_mut(VisitorContextMut::new(node, self))
     }
 }
@@ -249,19 +272,15 @@ impl DeserializeContents for ColorBuffer {
     const KIND: IrNodeType = IrNodeType::ColorBuffer;
 
     #[tracing::instrument(skip_all)]
-    fn deserialize_contents(
-        reader: &mut RefCursor<[u8]>
-    ) -> SlipstreamResult<Self> {
-        let _length = reader.read_u32::<BigEndian>()?;
-        let _mdl0_offset = reader.read_i32::<BigEndian>()?;
-        let _data_offset = reader.read_i32::<BigEndian>()?;
-        let _name_offset = reader.read_i32::<BigEndian>()?;
-        let index = reader.read_u32::<BigEndian>()?;
+    fn deserialize_contents(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
+        let header = SectionHeader::deserialize(reader)?;
         let components = ColorComponents::deserialize(reader)?;
         let format = ColorFormat::deserialize(reader)?;
         let stride = reader.read_u8()?;
         let _padding = reader.read_u8()?;
         let color_count = reader.read_u16::<BigEndian>()?;
+
+        reader.set_position(header.get_data_start());
 
         let mut colors = Vec::with_capacity(color_count as usize);
         for _ in 0..color_count {
@@ -270,7 +289,7 @@ impl DeserializeContents for ColorBuffer {
         }
 
         Ok(Self {
-            index,
+            header,
             components,
             format,
             stride,

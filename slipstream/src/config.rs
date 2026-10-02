@@ -12,7 +12,7 @@ pub fn configure_dark_style() -> egui::Style {
     egui::Style {
         visuals: egui::Visuals {
             interact_cursor: Some(egui::CursorIcon::PointingHand),
-            window_fill: egui::Color32::from_gray(30),
+            window_fill: egui::Color32::from_gray(60),
             widgets: egui::style::Widgets {
                 active: egui::style::WidgetVisuals {
                     corner_radius: egui::CornerRadius::ZERO,
@@ -36,7 +36,7 @@ pub fn configure_dark_style() -> egui::Style {
                 },
                 ..Default::default()
             },
-            panel_fill: egui::Color32::from_gray(40),
+            panel_fill: egui::Color32::from_gray(70),
             ..Default::default()
         },
         ..Default::default()

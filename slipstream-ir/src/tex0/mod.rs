@@ -52,7 +52,7 @@ pub struct Texture {
 
 impl Visitable for Texture {
     fn accept(&self, node: VisitorContextNode, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_texture(VisitorContext::new(node, self));
+        visitor.visit_tex0(VisitorContext::new(node, self));
         ControlFlow::Continue(())
     }
 
@@ -61,7 +61,7 @@ impl Visitable for Texture {
         node: VisitorContextNodeMut,
         visitor: &mut dyn Visitor,
     ) -> std::ops::ControlFlow<()> {
-        visitor.visit_texture_mut(VisitorContextMut::new(node, self));
+        visitor.visit_tex0(VisitorContextMut::new(node, self));
         ControlFlow::Continue(())
     }
 }

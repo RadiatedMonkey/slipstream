@@ -1,17 +1,21 @@
-use byteorder::{BigEndian, ReadBytesExt};
-use slipstream_shared::cursor::RefCursor;
+use std::ops::ControlFlow;
+
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use slipstream_shared::cursor::{MutCursor, RefCursor};
 use slipstream_shared::error::{
     CorruptionError, IncorrectFormat, RangeError, SlipstreamError, SlipstreamResult,
     UnsupportedError,
 };
 
 use crate::arc::UnknownFile;
-use crate::encoding::ReadArrayExt;
+use crate::encoding::{ReadArrayExt, WriteArrayExt};
 use crate::index::IndexGroup;
 use crate::mdl0::{self, MDL0_MAGIC};
 use crate::node::arena::{IrArena, IrNodeDescriptor, IrNodeKey};
-use crate::node::node::{ContentSlot, IrNodeType};
-use crate::tex0::{self, TEX0_MAGIC};
+use crate::node::node::IrNodeType::Mdl0Root;
+use crate::node::node::{ContentSlot, IrNode, IrNodeType};
+use crate::tex0::{self, TEX0_MAGIC, Texture};
+use crate::visitor::{Visitor, VisitorContext, VisitorContextNode};
 
 /// Equals "bres". This is always at the start of a BRRES file.
 pub const BRRES_MAGIC: [u8; 4] = [0x62, 0x72, 0x65, 0x73];
@@ -44,7 +48,8 @@ pub fn get_section_count(ty: BFileType, version: u32) -> SlipstreamResult<usize>
                 return Err(CorruptionError {
                     reason: format!("invalid TEX0 version: {version} (must be 1, 2 or 3)"),
                     ..Default::default()
-                }.into());
+                }
+                .into());
             }
         },
         BFileType::Chr0 => match version {
@@ -134,6 +139,18 @@ impl BrresHeader {
             section_count,
         })
     }
+
+    pub fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u8_array(BRRES_MAGIC)?;
+        // Our files are always big endian
+        writer.write_u8_array(BE_BOM)?;
+        writer.write_u16::<BigEndian>(0)?; // padding
+        writer.write_u32::<BigEndian>(self.size)?;
+        writer.write_u16::<BigEndian>(self.root_offset)?;
+        writer.write_u16::<BigEndian>(self.section_count)?;
+
+        Ok(())
+    }
 }
 
 /// Files in a BRRES archive.
@@ -155,7 +172,7 @@ pub struct RootSection {
 }
 
 impl RootSection {
-    fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
+    pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let magic = reader.read_u8_array::<4>()?;
         if magic != Self::MAGIC {
             return Err(IncorrectFormat {
@@ -169,6 +186,12 @@ impl RootSection {
         Ok(RootSection {
             size: reader.read_u32::<BigEndian>()?,
         })
+    }
+
+    pub fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u8_array(Self::MAGIC)?;
+        writer.write_u32::<BigEndian>(self.size)?;
+        Ok(())
     }
 }
 
@@ -224,6 +247,22 @@ impl BFileHeader {
             offsets,
             name_offset,
         })
+    }
+
+    pub fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(self.subfile_length)?;
+        writer.write_u32::<BigEndian>(self.subfile_version)?;
+        writer.write_i32::<BigEndian>(self.brres_offset)?; // needs to be substituted
+
+        for offset in &self.offsets {
+            writer.write_i32::<BigEndian>(*offset)?;
+        }
+
+        writer.write_i32::<BigEndian>(self.name_offset)?; // needs to be substituted
+
+        todo!("substitute offsets");
+
+        Ok(())
     }
 
     /// Obtains the starting index of the specified section.
@@ -282,6 +321,37 @@ fn deserialize_bfile(
     }
 }
 
+fn serialize_bfile(writer: &mut MutCursor, node: &IrNode) -> SlipstreamResult<()> {
+    struct BFileVisitor<'a> {
+        result: SlipstreamResult<()>,
+        writer: &'a mut MutCursor,
+    }
+
+    impl Visitor for BFileVisitor<'_> {
+        fn visit_mdl0(&mut self, bfile: VisitorContext<'_, mdl0::Model>) -> ControlFlow<()> {
+            self.result = bfile.content.serialize(self.writer);
+            ControlFlow::Break(())
+        }
+
+        fn visit_tex0(&mut self, bfile: VisitorContext<'_, tex0::Texture>) -> ControlFlow<()> {
+            self.result = bfile.content.serialize(self.writer);
+            ControlFlow::Break(())
+        }
+    }
+
+    let mut visitor = BFileVisitor {
+        result: Ok(()),
+        writer,
+    };
+
+    match node.contents.get() {
+        Some(c) => c.accept(VisitorContextNode::from(node), &mut visitor),
+        None => todo!("serialize unparsed file"), // this can be transferred straight over rather than deserializing and then serializing
+    };
+
+    Ok(())
+}
+
 /// Deserializes the contents of NW4R directories.
 ///
 /// These are the actual roots of MDL0, CHR0, ßetc files.
@@ -323,6 +393,13 @@ fn deserialize_nw4r_subdirectories(
     );
 
     Ok(dir_key)
+}
+
+fn serialize_nw4r_subdirectories(writer: &mut MutCursor) -> SlipstreamResult<()> {
+    let index: IndexGroup = todo!("index group");
+    index.serialize(writer)?;
+
+    Ok(())
 }
 
 /// Deserializes the directories with an NW4R suffix,

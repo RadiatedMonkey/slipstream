@@ -229,11 +229,11 @@ pub trait Visitor {
     // TEX0 methods
     // ==================================================================================================
 
-    fn visit_texture(&mut self, texture: VisitorContext<'_, Texture>) -> ControlFlow<()> {
+    fn visit_tex0(&mut self, texture: VisitorContext<'_, Texture>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
 
-    fn visit_texture_mut(&mut self, texture: VisitorContextMut<'_, Texture>) -> ControlFlow<()> {
+    fn visit_tex0_mut(&mut self, texture: VisitorContextMut<'_, Texture>) -> ControlFlow<()> {
         ControlFlow::Continue(())
     }
 }

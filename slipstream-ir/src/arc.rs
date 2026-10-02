@@ -1,16 +1,19 @@
 use std::ops::ControlFlow;
 
-use byteorder::{BigEndian, ReadBytesExt};
-use slipstream_shared::cursor::RefCursor;
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use slipstream_shared::cursor::{MutCursor, RefCursor};
 use slipstream_shared::error::{
     CorruptionError, IncorrectFormat, SlipstreamError, SlipstreamResult,
 };
 
 use crate::brres::{self, BRRES_MAGIC};
-use crate::encoding::{ReadArrayExt, ReadStringExt};
+use crate::encoding::{ReadArrayExt, ReadStringExt, WriteArrayExt};
 use crate::node::arena::{IrArena, IrNodeDescriptor, IrNodeKey};
 use crate::node::node::{ContentSlot, IrNode, IrNodeType};
-use crate::visitor::{Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
+use crate::visitor::{
+    Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNode,
+    VisitorContextNodeMut,
+};
 
 /// Magic of an ARC file.
 pub const ARC_MAGIC: [u8; 4] = [0x55, 0xAA, 0x38, 0x2D];
@@ -52,6 +55,18 @@ impl Header {
             reserved,
         })
     }
+
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u8_array(ARC_MAGIC)?;
+        writer.write_i32::<BigEndian>(self.node_offset)?;
+        writer.write_i32::<BigEndian>(self.size)?;
+        writer.write_i32::<BigEndian>(self.file_offset)?;
+        writer.write_i32_array::<_, BigEndian>([0; 4])?;
+
+        todo!("substitute offsets");
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -65,6 +80,11 @@ impl NodeType {
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let b = reader.read_u8()?;
         Self::try_from(b)
+    }
+
+    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u8(*self as u8)?;
+        Ok(())
     }
 }
 
@@ -155,7 +175,11 @@ impl Visitable for UnknownFile {
         visitor.visit_unknown(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+    fn accept_mut(
+        &mut self,
+        node: VisitorContextNodeMut<'_>,
+        visitor: &mut dyn Visitor,
+    ) -> ControlFlow<()> {
         visitor.visit_unknown_mut(VisitorContextMut::new(node, self))
     }
 }
@@ -198,7 +222,11 @@ impl Visitable for ArcDirectory {
         visitor.visit_arc(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+    fn accept_mut(
+        &mut self,
+        node: VisitorContextNodeMut<'_>,
+        visitor: &mut dyn Visitor,
+    ) -> ControlFlow<()> {
         visitor.visit_arc_mut(VisitorContextMut::new(node, self))
     }
 }

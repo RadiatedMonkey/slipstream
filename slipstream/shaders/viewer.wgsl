@@ -29,6 +29,13 @@ fn linear_to_srgb(color: vec3f) -> vec3f {
     return 1.055 * pow(color, vec3f(1.0 / 2.4)) - 0.055;
 }
 
+fn compute_diffuse(normal: vec3f) -> vec3f {
+    let sunDirection = vec3f(0.0, -1.0, 1.0);
+    let dot = dot(normal, sunDirection);
+
+    return vec3f(normal * 0.5 + 0.5) * dot;
+}
+
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let color = input.normal * 0.5 + 0.5;

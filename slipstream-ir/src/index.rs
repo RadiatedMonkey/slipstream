@@ -1,5 +1,8 @@
-use byteorder::{BigEndian, ReadBytesExt};
-use slipstream_shared::{cursor::RefCursor, error::SlipstreamResult};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use slipstream_shared::{
+    cursor::{MutCursor, RefCursor, SizeEstimate},
+    error::SlipstreamResult,
+};
 
 use crate::encoding::ReadStringExt;
 
@@ -13,11 +16,24 @@ pub struct IndexGroupHeader {
 }
 
 impl IndexGroupHeader {
-    fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
+    pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         Ok(Self {
             length: reader.read_u32::<BigEndian>()?,
             number: reader.read_u32::<BigEndian>()?,
         })
+    }
+
+    pub fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u32::<BigEndian>(self.length)?;
+        writer.write_u32::<BigEndian>(self.number)?;
+        Ok(())
+    }
+}
+
+impl SizeEstimate for IndexGroupHeader {
+    #[inline]
+    fn estimate_size(&self) -> usize {
+        8
     }
 }
 
@@ -45,7 +61,7 @@ pub struct IndexGroupEntry {
 }
 
 impl IndexGroupEntry {
-    fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
+    pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let entry_id = reader.read_u16::<BigEndian>()?;
         let flag = reader.read_u16::<BigEndian>()?;
         let left_index = reader.read_u16::<BigEndian>()?;
@@ -61,6 +77,26 @@ impl IndexGroupEntry {
             name_pointer,
             data_pointer,
         })
+    }
+
+    pub fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        writer.write_u16::<BigEndian>(self.entry_id)?;
+        writer.write_u16::<BigEndian>(self.flag)?;
+        writer.write_u16::<BigEndian>(self.left_index)?;
+        writer.write_u16::<BigEndian>(self.right_index)?;
+        writer.write_u32::<BigEndian>(self.name_pointer)?; // must be substituted
+        writer.write_u32::<BigEndian>(self.data_pointer)?; // must be substituted
+
+        todo!("substitute offsets");
+
+        Ok(())
+    }
+}
+
+impl SizeEstimate for IndexGroupEntry {
+    #[inline]
+    fn estimate_size(&self) -> usize {
+        16
     }
 }
 
@@ -133,5 +169,23 @@ impl IndexGroup {
             header,
             entries,
         })
+    }
+
+    pub fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+        self.header.serialize(writer)?;
+
+        for entry in &self.entries {
+            entry.serialize(writer)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl SizeEstimate for IndexGroup {
+    #[inline]
+    fn estimate_size(&self) -> usize {
+        self.header.estimate_size()
+            + self.entries.len() * self.entries.first().map(|f| f.estimate_size()).unwrap_or(0)
     }
 }
