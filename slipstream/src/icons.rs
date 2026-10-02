@@ -5,7 +5,7 @@ egui_phosphor::subset! {
         use regular::{
             FOLDER, FOLDER_OPEN, FOLDER_MINUS, FOLDER_PLUS, X, INFO, MINUS, SQUARE, FOLDER_DASHED, BONE,
             QUESTION_MARK, FILE, CUBE, POLYGON, ARROW_ELBOW_RIGHT, MOON, GEAR_FINE, GITHUB_LOGO, SUN, POWER,
-            FILE_CODE, PAINT_BRUSH_HOUSEHOLD, BOUNDING_BOX, LINK, PALETTE, GRAPHICS_CARD, PERSON
+            FILE_CODE, PAINT_BRUSH_HOUSEHOLD, BOUNDING_BOX, LINK, PALETTE, GRAPHICS_CARD, PERSON, IMAGES
         };
         use fill::{FOLDER, BONE};
     }
@@ -56,6 +56,7 @@ impl NodeIconsExt for IrNodeType {
             Self::ArcDirectory { empty: false } | Self::Nw4rDirectory => reg_icon!(FOLDER),
             Self::ArcDirectory { empty: true } => reg_icon!(FOLDER_DASHED),
             Self::BrresFile => reg_icon!(FOLDER),
+
             Self::Mdl0Root => reg_icon!(PERSON),
             Self::Definitions => reg_icon!(FILE_CODE),
             Self::Bone { end: false } => reg_icon!(BONE),
@@ -69,6 +70,9 @@ impl NodeIconsExt for IrNodeType {
             Self::Polygon => reg_icon!(CUBE),
             Self::TextureLinks => reg_icon!(LINK),
             Self::PaletteLinks => reg_icon!(LINK),
+
+            Self::Texture => reg_icon!(IMAGES),
+
             Self::Unknown => reg_icon!(FILE),
         }
     }

@@ -216,7 +216,7 @@ impl<'a> ModelTranslator<'a> {
             let r2 = self.resolve_vertex(scratch, polygon, v2)?;
             let r3 = self.resolve_vertex(scratch, polygon, v3)?;
 
-            if i & 2 == 0 {
+            if i % 2 == 0 {
                 scratch.indices.extend([r1, r2, r3]);
             } else {
                 scratch.indices.extend([r2, r1, r3]);

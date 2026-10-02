@@ -1,10 +1,19 @@
+use std::ops::ControlFlow;
+
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::{RefCursor, SlipstreamResult, error::UnsupportedError, try_unwrap};
 
 use crate::{
     brres::{BFileHeader, BFileType},
     encoding::Deserialize,
-    node::arena::{IrArena, IrNodeKey},
+    node::{
+        arena::{IrArena, IrNodeDescriptor, IrNodeKey},
+        node::{ContentSlot, IrNodeType},
+    },
+    visitor::{
+        Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNode,
+        VisitorContextNodeMut,
+    },
 };
 
 pub const TEX0_MAGIC: [u8; 4] = [0x54, 0x45, 0x58, 0x30]; // "TEX0"
@@ -41,6 +50,22 @@ pub struct Texture {
     pub mipmap_count: u32,
 }
 
+impl Visitable for Texture {
+    fn accept(&self, node: VisitorContextNode, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+        visitor.visit_texture(VisitorContext::new(node, self));
+        ControlFlow::Continue(())
+    }
+
+    fn accept_mut(
+        &mut self,
+        node: VisitorContextNodeMut,
+        visitor: &mut dyn Visitor,
+    ) -> std::ops::ControlFlow<()> {
+        visitor.visit_texture_mut(VisitorContextMut::new(node, self));
+        ControlFlow::Continue(())
+    }
+}
+
 #[tracing::instrument(skip_all, fields(name, parent_id))]
 pub fn deserialize(
     reader: &mut RefCursor<[u8]>,
@@ -49,17 +74,27 @@ pub fn deserialize(
     name: String,
 ) -> SlipstreamResult<IrNodeKey> {
     let subfile_header = BFileHeader::deserialize(reader, BFileType::Tex0)?;
-    
+
     let flag = reader.read_u32::<BigEndian>()?;
     let pixel_width = reader.read_u16::<BigEndian>()?;
     let pixel_height = reader.read_u16::<BigEndian>()?;
-    let image_format = TextureFormat::deserialize(reader)?;
+    let format = TextureFormat::deserialize(reader)?;
     let mipmap_count = reader.read_u32::<BigEndian>()?;
     let min_mipmap_used = reader.read_f32::<BigEndian>()?;
     let max_mipmap_used = reader.read_f32::<BigEndian>()?;
     let _unused = reader.read_u32::<BigEndian>()?;
 
-    // Jump to section 0 for image data
+    let key = arena.insert(IrNodeDescriptor {
+        label: name,
+        ty: IrNodeType::Texture,
+        parent: Some(parent_id),
+        children: Vec::new(),
+        contents: ContentSlot::eager(Box::new(Texture {
+            size: glam::u16vec2(pixel_width, pixel_height),
+            format,
+            mipmap_count,
+        })),
+    });
 
-    todo!()
+    Ok(key)
 }

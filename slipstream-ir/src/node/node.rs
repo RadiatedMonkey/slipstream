@@ -49,7 +49,7 @@ impl ContentSlot {
         match self {
             Self::Eager(Some(x)) => Some(x.as_mut()),
             Self::Eager(None) => None,
-            Self::Lazy(lock) => LazyContent::get_mut(lock)
+            Self::Lazy(lock) => LazyContent::get_mut(lock),
         }
     }
 
@@ -138,6 +138,7 @@ pub enum IrNodeType {
     BrresFile,
     /// The directories prefixed with `NW4R`.
     Nw4rDirectory,
+
     /// The root of an MDL0 model. This should contain the section directories `Vertices`, `Normals`.
     Mdl0Root,
     /// The bytecode section of an MDL0 file.
@@ -159,5 +160,9 @@ pub enum IrNodeType {
     Polygon,
     TextureLinks,
     PaletteLinks,
+
+    /// A TEX0 texture
+    Texture,
+
     Unknown,
 }
