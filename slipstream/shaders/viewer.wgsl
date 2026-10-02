@@ -8,20 +8,21 @@ struct CameraUniformData {
 var<uniform> camera: CameraUniformData;
 
 struct VertexInput {
-    @location(0) position: vec3f
+    @location(0) position: vec3f,
+    @location(1) normal: vec3f
 }
 
 struct VertexOutput {
     @builtin(position) vertex: vec4f,
-    @location(0) original: vec3f
+    @location(0) normal: vec3f
 }
 
 @vertex
-fn vs_main(model: VertexInput) -> VertexOutput {
-    var out: VertexOutput;
-    out.vertex = camera.view_proj * vec4f(model.position, 1.0);
-    out.original = model.position;
-    return out;
+fn vs_main(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    output.vertex = camera.view_proj * vec4f(input.position, 1.0);
+    output.normal = input.normal;
+    return output;
 }
 
 fn linear_to_srgb(color: vec3f) -> vec3f {
@@ -30,7 +31,7 @@ fn linear_to_srgb(color: vec3f) -> vec3f {
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    let color = input.original;
+    let color = input.normal * 0.5 + 0.5;
 
     // Convert the linear colours to SRGB.
     // Without this, the colours will look very washed out in the editor.

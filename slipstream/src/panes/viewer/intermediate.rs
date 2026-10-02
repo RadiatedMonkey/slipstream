@@ -2,7 +2,9 @@
 
 use crate::panes::viewer::pipeline::{DEPTH_FORMAT, MSAA_SAMPLE_COUNT, TARGET_FORMAT};
 use slipstream_ir::gx::GxOpCode;
-use slipstream_ir::gx::draw::{DrawOpCode, InlineNormal, InlinePosition, OpVertex, PositionData};
+use slipstream_ir::gx::draw::{
+    DrawOpCode, InlineNormal, InlinePosition, NormalData, NormalIndex, OpVertex, PositionData,
+};
 use slipstream_ir::mdl0::normals::NormalBuffer;
 use slipstream_ir::mdl0::polygon::Polygon;
 use slipstream_ir::mdl0::vertices::VertexBuffer;
@@ -20,6 +22,7 @@ use wgpu::util::DeviceExt;
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct VertexKey {
     pub position: VertexAttrKey,
+    pub normal: VertexAttrKey,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
@@ -39,6 +42,7 @@ type VertexIndex = u16;
 #[repr(C)]
 pub struct TranslatedVertex {
     pub position: [f32; 3],
+    pub normal: [f32; 3],
 }
 
 #[derive(Default, Debug)]
@@ -54,13 +58,21 @@ pub struct IntermediatePolygon {
     pub indices: Vec<VertexIndex>,
     /// This will become the new vertex buffer.
     pub vertices: Vec<TranslatedVertex>,
+    /// Buffer of positions that are stored inline in the draw command.
     pub inline_positions: Vec<[f32; 3]>,
+    /// Buffer of normals that are stored inline in the draw command.
+    pub inline_normals: Vec<[f32; 3]>,
 }
 
 impl IntermediatePolygon {
     pub fn insert_inline_position(&mut self, position: [f32; 3]) -> VertexAttrKey {
         self.inline_positions.push(position);
         VertexAttrKey::Inline(self.inline_positions.len() as u16 - 1)
+    }
+
+    pub fn insert_inline_normal(&mut self, normal: [f32; 3]) -> VertexAttrKey {
+        self.inline_normals.push(normal);
+        VertexAttrKey::Inline(self.inline_normals.len() as u16 - 1)
     }
 }
 
@@ -120,6 +132,15 @@ impl<'a> ModelTranslator<'a> {
         self.try_inspect_inner(*key, inspect_fn)
     }
 
+    fn try_inspect_normals<F, T>(&self, index: usize, inspect_fn: F) -> SlipstreamResult<T>
+    where
+        F: FnOnce(&NormalBuffer) -> SlipstreamResult<T>,
+    {
+        let key = try_unwrap!(self.normals.get(index), "normal buffer index out of range")?;
+
+        self.try_inspect_inner(*key, inspect_fn)
+    }
+
     fn translate_vertex(
         &self,
         scratch: &IntermediatePolygon,
@@ -127,6 +148,7 @@ impl<'a> ModelTranslator<'a> {
         vertex_key: &VertexKey,
     ) -> SlipstreamResult<TranslatedVertex> {
         const POSITION_DEFAULT: [f32; 3] = [0.0; 3];
+        const NORMAL_DEFAULT: [f32; 3] = [0.0, 1.0, 0.0];
 
         let position = match vertex_key.position {
             VertexAttrKey::NotPresent => POSITION_DEFAULT,
@@ -144,7 +166,23 @@ impl<'a> ModelTranslator<'a> {
                 .expect("inline position index out of range"),
         };
 
-        Ok(TranslatedVertex { position })
+        let normal = match vertex_key.normal {
+            VertexAttrKey::NotPresent => NORMAL_DEFAULT,
+            VertexAttrKey::Indexed(idx) => {
+                self.try_inspect_normals(polygon.normal_array_id as usize, |buf| {
+                    try_unwrap!(
+                        buf.get_normal(idx as usize),
+                        "normal {idx} did not exist in normal buffer"
+                    )
+                })?
+            }
+            VertexAttrKey::Inline(idx) => *scratch
+                .inline_normals
+                .get(idx as usize)
+                .expect("inline normal index out of range"),
+        };
+
+        Ok(TranslatedVertex { position, normal })
     }
 
     fn resolve_vertex(
@@ -165,6 +203,26 @@ impl<'a> ModelTranslator<'a> {
                 };
 
                 vertex_key.position = scratch.insert_inline_position(position);
+            }
+        }
+
+        match &vertex.normals {
+            NormalData::NotPresent => vertex_key.normal = VertexAttrKey::NotPresent,
+            NormalData::Index8(idx) => match idx {
+                NormalIndex::Single(x) => vertex_key.normal = VertexAttrKey::Indexed(*x as u16),
+                NormalIndex::Triple(x) => vertex_key.normal = VertexAttrKey::Indexed(x[0] as u16),
+            },
+            NormalData::Index16(idx) => match idx {
+                NormalIndex::Single(x) => vertex_key.normal = VertexAttrKey::Indexed(*x),
+                NormalIndex::Triple(x) => vertex_key.normal = VertexAttrKey::Indexed(x[0]),
+            },
+            NormalData::Direct(x) => {
+                let normal = match x {
+                    InlineNormal::Single(x) => *x,
+                    InlineNormal::Packed(x) => [x[0], x[1], x[2]],
+                };
+
+                vertex_key.normal = scratch.insert_inline_normal(normal);
             }
         }
 

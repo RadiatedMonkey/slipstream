@@ -6,10 +6,14 @@ use slipstream_shared::cursor::{MutCursor, RefCursor};
 use slipstream_shared::error::{CorruptionError, SlipstreamError, SlipstreamResult};
 use slipstream_shared::verify;
 
+use crate::mdl0::SectionHeader;
 use crate::mdl0::section::DeserializeContents;
 use crate::node::node::{IrNode, IrNodeType};
 use crate::util::{VectorDivisor, VertexFormat, deserialize_vector_data};
-use crate::visitor::{Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
+use crate::visitor::{
+    Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNode,
+    VisitorContextNodeMut,
+};
 
 const COMPONENTS_NORMAL: u32 = 0x0;
 const COMPONENTS_ALL: u32 = 0x1;
@@ -115,8 +119,7 @@ impl NormalBufData {
 /// to floats.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NormalBuffer {
-    /// Index of this buffer into the `Normals` section of the model.
-    pub index: u32,
+    pub header: SectionHeader,
     /// Scalar data type to use for the normal vectors.
     pub format: NormalFormat,
     /// The divisor is used to scale vectors at lower quality formats.
@@ -149,7 +152,11 @@ impl Visitable for NormalBuffer {
         visitor.visit_normals(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+    fn accept_mut(
+        &mut self,
+        node: VisitorContextNodeMut<'_>,
+        visitor: &mut dyn Visitor,
+    ) -> ControlFlow<()> {
         visitor.visit_normals_mut(VisitorContextMut::new(node, self))
     }
 }
@@ -159,24 +166,15 @@ impl DeserializeContents for NormalBuffer {
     const KIND: IrNodeType = IrNodeType::NormalBuffer;
 
     #[tracing::instrument(skip_all)]
-    fn deserialize_contents(
-        reader: &mut RefCursor<[u8]>
-    ) -> SlipstreamResult<Self> {
-        let _length = reader.read_u32::<BigEndian>()?;
-        let mdl0_offset_start = reader.position();
-        let mdl0_offset = reader.read_i32::<BigEndian>()?;
-        let data_offset = reader.read_i32::<BigEndian>()?;
-        let _name_offset = reader.read_i32::<BigEndian>()?;
-        let index = reader.read_u32::<BigEndian>()?;
+    fn deserialize_contents(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
+        let header = SectionHeader::deserialize(reader)?;
         let component_count = reader.read_u32::<BigEndian>()?;
         let format = NormalFormat::deserialize(reader)?;
         let divisor = reader.read_u8()?;
         let stride = reader.read_u8()?;
         let normal_count = reader.read_u16::<BigEndian>()?;
 
-        let header_start = mdl0_offset_start as i64 + mdl0_offset as i64;
-        let normals_start = header_start as i64 + data_offset as i64;
-        reader.set_position(normals_start as u64);
+        reader.set_position(header.get_data_start());
 
         let normals = match component_count {
             COMPONENTS_NORMAL => NormalBufData::Single(deserialize_vector_data::<3>(
@@ -208,7 +206,7 @@ impl DeserializeContents for NormalBuffer {
         };
 
         Ok(Self {
-            index,
+            header,
             format,
             divisor,
             stride,

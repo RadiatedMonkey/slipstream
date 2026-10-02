@@ -57,14 +57,21 @@ pub struct WgpuPolygon {
 
 impl WgpuPolygon {
     pub const INDEX_FORMAT: wgpu::IndexFormat = wgpu::IndexFormat::Uint16;
-    pub const VERTEX_FORMAT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
-        array_stride: 3 * size_of::<f32>() as u64,
+    pub const VERTEX_LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
+        array_stride: 6 * size_of::<f32>() as u64,
         step_mode: wgpu::VertexStepMode::Vertex,
-        attributes: &[wgpu::VertexAttribute {
-            format: wgpu::VertexFormat::Float32x3,
-            offset: 0,
-            shader_location: 0,
-        }],
+        attributes: &[
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x3,
+                offset: 0,
+                shader_location: 0,
+            },
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x3,
+                offset: 3 * size_of::<f32>() as u64,
+                shader_location: 1,
+            },
+        ],
     };
 
     pub fn from_intermediate(
@@ -87,15 +94,7 @@ impl WgpuPolygon {
 
         let pipeline_signature = pipelines.register(PipelineDescriptor {
             bind_groups: &[Some(camera_bg)],
-            vertex_layouts: &[Some(wgpu::VertexBufferLayout {
-                array_stride: 3 * size_of::<f32>() as u64,
-                attributes: &[wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x3,
-                    offset: 0,
-                    shader_location: 0,
-                }],
-                step_mode: wgpu::VertexStepMode::Vertex,
-            })],
+            vertex_layouts: &[Some(Self::VERTEX_LAYOUT)],
         });
 
         tracing::trace!("Generated wgpu model with {} indices", ir.indices.len());

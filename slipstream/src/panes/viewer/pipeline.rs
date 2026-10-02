@@ -443,7 +443,7 @@ pub struct ViewerPipeline {
 
     pub camera_state: CameraState,
     pub screen_texture_state: ScreenTextureState,
-    pub pipeline_state: PipelineState,
+    // pub pipeline_state: PipelineState,
     pub model_state: Option<WgpuModel>,
 }
 
@@ -466,7 +466,7 @@ impl ViewerPipeline {
 
         let camera_state = CameraState::new(camera, &graphics_state, viewport_size);
         let screen_texture_state = ScreenTextureState::new(&graphics_state, viewport_size);
-        let pipeline_state = PipelineState::new(&graphics_state, &camera_state);
+        // let pipeline_state = PipelineState::new(&graphics_state, &camera_state);
         let model_state = intermediate_model
             .map(|model| WgpuModel::from_intermediate(&graphics_state.device, &camera_state, model))
             .transpose()?;
@@ -476,7 +476,7 @@ impl ViewerPipeline {
         Ok(Self {
             camera_state,
             screen_texture_state,
-            pipeline_state,
+            // pipeline_state,
             model_state,
 
             grid,
