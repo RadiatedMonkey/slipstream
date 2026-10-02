@@ -7,6 +7,7 @@ pub mod index;
 pub mod mdl0;
 pub mod node;
 pub mod pat0;
+pub mod tex0;
 pub mod util;
 pub mod visitor;
 pub mod yaz0;

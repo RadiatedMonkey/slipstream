@@ -11,6 +11,7 @@ use crate::index::IndexGroup;
 use crate::mdl0::{self, MDL0_MAGIC};
 use crate::node::arena::{IrArena, IrNodeDescriptor, IrNodeKey};
 use crate::node::node::{ContentSlot, IrNodeType};
+use crate::tex0::{self, TEX0_MAGIC};
 
 /// Equals "bres". This is always at the start of a BRRES file.
 pub const BRRES_MAGIC: [u8; 4] = [0x62, 0x72, 0x65, 0x73];
@@ -33,6 +34,17 @@ pub fn get_section_count(ty: BFileType, version: u32) -> SlipstreamResult<usize>
                     ..Default::default()
                 }
                 .into());
+            }
+        },
+        BFileType::Tex0 => match version {
+            1 => 1,
+            2 => 2,
+            3 => 1,
+            _ => {
+                return Err(CorruptionError {
+                    reason: format!("invalid TEX0 version: {version} (must be 1, 2 or 3)"),
+                    ..Default::default()
+                }.into());
             }
         },
         BFileType::Chr0 => match version {
@@ -77,7 +89,7 @@ struct BrresHeader {
 impl BrresHeader {
     pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let start = reader.position();
-        
+
         let magic = reader.read_u8_array::<4>()?;
         if magic != BRRES_MAGIC {
             return Err(IncorrectFormat {
@@ -238,6 +250,7 @@ pub enum BFileType {
     /// Character animations controlling the bones of a mesh.
     Chr0,
     Pat0,
+    Tex0,
 }
 
 #[tracing::instrument(skip_all, fields(name))]
@@ -252,6 +265,7 @@ fn deserialize_bfile(
 
     match magic {
         MDL0_MAGIC => mdl0::deserialize(reader, parent_id, arena, name),
+        TEX0_MAGIC => tex0::deserialize(reader, parent_id, arena, name),
         // Chr0Subfile::MAGIC => Chr0Subfile::deserialize_lazy(reader),
         _ => {
             let key = arena.insert(IrNodeDescriptor {
