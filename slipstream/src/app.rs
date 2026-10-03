@@ -41,7 +41,7 @@ impl App {
         egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
         egui_phosphor::add_font_bytes_as_family(
             &mut fonts,
-            "mktools::icons::icons::fill",
+            "slipstream::icons::icons::fill",
             egui_phosphor::bytes::fill::FONT,
         );
 

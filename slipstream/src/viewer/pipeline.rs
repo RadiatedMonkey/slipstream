@@ -2,14 +2,14 @@ use eframe::egui_wgpu;
 use slipstream_shared::SlipstreamResult;
 use wgpu::util::DeviceExt;
 
-use crate::{
-    panes::viewer::{grid::GridPipeline, intermediate::IntermediateModel, wgpu::WgpuModel},
-    shared::{
-        GraphicsState,
-        camera::{Camera, CameraController, CameraUniformData, OrbitCamera},
-        vertex::{CUBE_INDICES, CUBE_VERTICES, Vertex3},
-    },
+use crate::viewer::{grid::GridPipeline, wgpu::WgpuModel};
+use crate::
+shared::{
+    GraphicsState,
+    camera::{Camera, CameraController, CameraUniformData, OrbitCamera},
+    vertex::{CUBE_INDICES, CUBE_VERTICES, Vertex3},
 };
+use crate::viewer::translation::IntermediateModel;
 
 const DEFAULT_VIEWPORT: egui::Rect =
     egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0));
@@ -332,7 +332,7 @@ impl PipelineState {
     pub fn new(state: &GraphicsState, camera_state: &CameraState) -> Self {
         let shader = state
             .device
-            .create_shader_module(wgpu::include_wgsl!("../../../shaders/viewer.wgsl").into());
+            .create_shader_module(wgpu::include_wgsl!("../../shaders/viewer.wgsl").into());
 
         let pipeline_layout =
             state

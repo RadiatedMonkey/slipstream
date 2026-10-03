@@ -10,12 +10,12 @@ use crate::cmd::AppCommandChannel;
 use crate::decorations::{self, WindowState};
 use crate::pages::RoutablePage;
 use crate::pages::intro::IntroPage;
+use crate::panes::inspector::InspectorPane;
 use crate::panes::log::LogPane;
 use crate::panes::outliner::OutlinerPane;
-use crate::panes::viewer::ViewerPane;
 use crate::panes::{Pane, PaneAction, PaneBehavior, RequestNewPane};
-use crate::panes::inspector::InspectorPane;
 use crate::shared::GraphicsState;
+use crate::viewer::ViewerPane;
 
 pub struct Properties {
     pub label: String,
@@ -200,7 +200,7 @@ impl Editor {
                 self.arena.clone(),
                 self.render_state.clone(),
             )?,
-            RequestNewPane::Log => LogPane::new(),
+            RequestNewPane::Log => LogPane::new(self.pane_behavior.sender.clone()),
         };
 
         let new_pane_id = self.pane_tree.tiles.insert_pane(new_pane);

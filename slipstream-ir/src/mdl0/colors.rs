@@ -152,7 +152,7 @@ impl ColorFormat {
 
     pub fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
         verify!(
-            self != ColorFormat::Invalid,
+            *self != ColorFormat::Invalid,
             "cannot serialize an Invalid color format"
         );
 
@@ -166,7 +166,7 @@ impl ColorFormat {
 /// This data cannot be used on its own. It is indexed into by the indices in the shape draw commands.
 #[derive(Debug, Clone)]
 pub struct ColorBuffer {
-    index: u32,
+    header: SectionHeader,
     components: ColorComponents,
     format: ColorFormat,
     stride: u8,

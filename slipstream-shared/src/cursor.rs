@@ -15,18 +15,22 @@ pub struct MutCursor {
 }
 
 impl MutCursor {
+    #[inline]
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[inline]
     pub fn into_inner(self) -> Vec<u8> {
         self.inner
     }
 
+    #[inline]
     pub fn reserve(&mut self, additional: usize) {
         self.inner.reserve(additional);
     }
 
+    #[inline]
     pub fn len(&self) -> usize {
         self.inner.len()
     }
@@ -76,10 +80,7 @@ pub struct RefCursor<T: ?Sized> {
 
 impl<T: ?Sized> RefCursor<T> {
     pub fn new(inner: Arc<T>) -> Self {
-        Self {
-            inner,
-            pos: 0,
-        }
+        Self { inner, pos: 0 }
     }
 
     pub fn into_inner(self) -> Arc<T> {
@@ -129,7 +130,7 @@ impl<T: ?Sized> Clone for RefCursor<T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
-            pos: self.pos
+            pos: self.pos,
         }
     }
 }

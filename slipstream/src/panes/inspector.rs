@@ -10,16 +10,30 @@ use slipstream_shared::inspect::Inspect;
 use slipstream_shared::{SlipstreamError, SlipstreamResult};
 use std::ops::ControlFlow;
 use std::sync::{Arc, mpsc};
+use slipstream_ir::mdl0::bones::Bone;
+use crate::reg_icon;
 
 struct InspectorVisitor<'ui> {
     pub ui: &'ui mut egui::Ui,
 }
 
 impl Visitor for InspectorVisitor<'_> {
-    fn visit_definitions(
+    fn visit_definitions_mut(
         &mut self,
-        definitions: VisitorContext<'_, Definitions>,
+        context: VisitorContextMut<'_, Definitions>,
     ) -> ControlFlow<()> {
+        egui::ScrollArea::vertical().show(self.ui, |ui| {
+            ui.label(format!("{:#?}", context.content));
+        });
+        ControlFlow::Continue(())
+    }
+
+    fn visit_bone_mut(
+        &mut self, context: VisitorContextMut<'_, Bone>,
+    ) -> ControlFlow<()> {
+        egui::ScrollArea::vertical().show(self.ui, |ui| {
+            ui.label(format!("{:#?}", context.content));
+        });
         ControlFlow::Continue(())
     }
 
@@ -102,8 +116,17 @@ impl Pane for InspectorPane {
         egui::WidgetText::Text(String::from("Inspector"))
     }
 
-    fn draw(&mut self, ui: &mut egui::Ui, _tile_id: egui_tiles::TileId) -> egui_tiles::UiResponse {
-        let drag_started = ui.heading("Inspector").drag_started();
+    fn draw(&mut self, ui: &mut egui::Ui, tile_id: egui_tiles::TileId) -> egui_tiles::UiResponse {
+        let egui::InnerResponse { inner, .. } = ui.horizontal(|ui| {
+            let drag_started = ui.heading("Inspector").drag_started();
+
+            if ui.button(reg_icon!(X)).clicked() {
+                self.cmd_sender.send(PaneAction::RemoveTile(tile_id))?;
+            }
+
+            Ok::<_, SlipstreamError>(drag_started)
+        });
+        let drag_started = inner.expect("failed to send pane close request");
 
         self.draw_properties(ui).unwrap();
 

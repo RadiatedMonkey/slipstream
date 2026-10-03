@@ -1,7 +1,7 @@
 pub mod grid;
-pub mod intermediate;
 pub mod pipeline;
 pub mod wgpu;
+pub mod translation;
 
 use std::{
     hash::Hasher,
@@ -11,18 +11,15 @@ use std::{
 use eframe::egui_wgpu;
 use slipstream_ir::node::arena::{IrArena, IrNodeKey};
 use slipstream_shared::error::SlipstreamResult;
-
-use crate::{
-    panes::{
-        ContentSignature, Pane, PaneAction,
-        viewer::{
-            intermediate::ModelTranslator,
-            pipeline::{TEXTURE_FILTER_MODE, ViewerCallback, ViewerPipeline},
-            wgpu::WgpuModel,
-        },
-    },
-    shared::{GraphicsState, camera::CameraController},
+use slipstream_shared::SlipstreamError;
+use crate::viewer::{
+    pipeline::{TEXTURE_FILTER_MODE, ViewerCallback, ViewerPipeline},
+    wgpu::WgpuModel,
 };
+use crate::{panes::{
+    ContentSignature, Pane, PaneAction,
+}, reg_icon, shared::{GraphicsState, camera::CameraController}};
+use crate::viewer::translation::ModelContents;
 
 pub struct ViewerPane {
     cmd_sender: mpsc::Sender<PaneAction>,
@@ -43,7 +40,7 @@ impl ViewerPane {
         render_state: GraphicsState,
     ) -> SlipstreamResult<Box<dyn Pane>> {
         let model = mdl0_node
-            .map(|node| ModelTranslator::from_root(node, &arena))
+            .map(|node| ModelContents::from_root(node, &arena))
             .transpose()?
             .map(|model| model.to_intermediate(&arena))
             .transpose()?;
@@ -77,8 +74,17 @@ impl Pane for ViewerPane {
         egui::WidgetText::Text(String::from("3D Viewer"))
     }
 
-    fn draw(&mut self, ui: &mut egui::Ui, _tile_id: egui_tiles::TileId) -> egui_tiles::UiResponse {
-        let drag_started = ui.heading("3D Viewer").drag_started();
+    fn draw(&mut self, ui: &mut egui::Ui, tile_id: egui_tiles::TileId) -> egui_tiles::UiResponse {
+        let egui::InnerResponse { inner, .. } = ui.horizontal(|ui| {
+            let drag_started = ui.heading("3D viewer").drag_started();
+
+            if ui.button(reg_icon!(X)).clicked() {
+                self.cmd_sender.send(PaneAction::RemoveTile(tile_id))?;
+            }
+
+            Ok::<_, SlipstreamError>(drag_started)
+        });
+        let drag_started = inner.expect("failed to send pane close request");
 
         egui::Frame::canvas(ui.style()).show(ui, |ui| {
             let target_size = ui.available_size();

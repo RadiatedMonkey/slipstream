@@ -18,7 +18,7 @@ pub struct Header {
 }
 
 impl Header {
-    fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
+    pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let magic = reader.read_u8_array::<4>()?;
         if magic != YAZ0_MAGIC {
             return Err(IncorrectFormat {
@@ -85,7 +85,7 @@ pub struct Yaz0File {
 }
 
 impl Yaz0File {
-    fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
+    pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let header = Header::deserialize(reader)?;
 
         tracing::trace!(
@@ -127,15 +127,13 @@ impl Yaz0File {
                     let rrr = (b1 & 0x0f) << 8 | b2;
 
                     let mut n = b1 >> 4;
-                    let copy_size;
-
-                    if n == 0 {
+                    let copy_size = if n == 0 {
                         // 3 byte data, NN is at the end
                         n = reader.read_u8()? as usize;
-                        copy_size = n + 0x12;
+                        n + 0x12
                     } else {
-                        copy_size = n + 2;
-                    }
+                        n + 2
+                    };
 
                     let copy_start = uncompressed.len().checked_sub(rrr + 1).ok_or_else(|| {
                         SlipstreamError::from(CorruptionError {

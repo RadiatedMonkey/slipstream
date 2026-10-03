@@ -52,8 +52,7 @@ pub struct Texture {
 
 impl Visitable for Texture {
     fn accept(&self, node: VisitorContextNode, visitor: &mut dyn Visitor) -> ControlFlow<()> {
-        visitor.visit_tex0(VisitorContext::new(node, self));
-        ControlFlow::Continue(())
+        visitor.visit_tex0(VisitorContext::new(node, self))
     }
 
     fn accept_mut(
@@ -61,8 +60,7 @@ impl Visitable for Texture {
         node: VisitorContextNodeMut,
         visitor: &mut dyn Visitor,
     ) -> std::ops::ControlFlow<()> {
-        visitor.visit_tex0(VisitorContextMut::new(node, self));
-        ControlFlow::Continue(())
+        visitor.visit_tex0_mut(VisitorContextMut::new(node, self))
     }
 }
 
@@ -83,6 +81,8 @@ pub fn deserialize(
     let min_mipmap_used = reader.read_f32::<BigEndian>()?;
     let max_mipmap_used = reader.read_f32::<BigEndian>()?;
     let _unused = reader.read_u32::<BigEndian>()?;
+
+    reader.set_position(subfile_header.get_section_start(0)?);
 
     let key = arena.insert(IrNodeDescriptor {
         label: name,

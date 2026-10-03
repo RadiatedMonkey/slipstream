@@ -266,7 +266,7 @@ impl BFileHeader {
     }
 
     /// Obtains the starting index of the specified section.
-    pub fn get_section_start(&self, section_index: usize) -> SlipstreamResult<u32> {
+    pub fn get_section_start(&self, section_index: usize) -> SlipstreamResult<u64> {
         let offset = *self.offsets.get(section_index).ok_or_else(|| {
             SlipstreamError::from(RangeError {
                 requested: section_index as u64,
@@ -275,7 +275,7 @@ impl BFileHeader {
             })
         })?;
 
-        Ok((self.header_start as i32 + offset) as u32)
+        Ok((self.header_start as i64 + offset as i64) as u64)
     }
 }
 
@@ -329,13 +329,11 @@ fn serialize_bfile(writer: &mut MutCursor, node: &IrNode) -> SlipstreamResult<()
 
     impl Visitor for BFileVisitor<'_> {
         fn visit_mdl0(&mut self, bfile: VisitorContext<'_, mdl0::Model>) -> ControlFlow<()> {
-            self.result = bfile.content.serialize(self.writer);
-            ControlFlow::Break(())
+            todo!()
         }
 
         fn visit_tex0(&mut self, bfile: VisitorContext<'_, tex0::Texture>) -> ControlFlow<()> {
-            self.result = bfile.content.serialize(self.writer);
-            ControlFlow::Break(())
+            todo!()
         }
     }
 

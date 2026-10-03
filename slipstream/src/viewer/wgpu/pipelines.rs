@@ -3,8 +3,7 @@ use std::{
     hash::{DefaultHasher, Hash, Hasher},
 };
 
-use crate::panes::viewer::{
-    intermediate::IntermediatePolygon,
+use crate::viewer::{
     pipeline::{DEPTH_FORMAT, MSAA_SAMPLE_COUNT, TARGET_FORMAT},
 };
 
@@ -54,7 +53,7 @@ impl PipelineRegistry {
         self.pipelines.entry(signature).or_insert_with(|| {
             let module = self
                 .device
-                .create_shader_module(wgpu::include_wgsl!("../../../../shaders/viewer.wgsl"));
+                .create_shader_module(wgpu::include_wgsl!("../../../shaders/viewer.wgsl"));
 
             let layout = self
                 .device

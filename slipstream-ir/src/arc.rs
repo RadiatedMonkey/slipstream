@@ -7,6 +7,7 @@ use slipstream_shared::error::{
 };
 
 use crate::brres::{self, BRRES_MAGIC};
+use crate::deferred_pass::{DEFER_PLACEHOLDER, DEFER_PLACEHOLDER24, DeferredPass, DeferredString};
 use crate::encoding::{ReadArrayExt, ReadStringExt, WriteArrayExt};
 use crate::node::arena::{IrArena, IrNodeDescriptor, IrNodeKey};
 use crate::node::node::{ContentSlot, IrNode, IrNodeType};
@@ -32,7 +33,7 @@ struct Header {
 }
 
 impl Header {
-    fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
+    pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let magic = reader.read_u8_array::<4>()?;
         if magic != ARC_MAGIC {
             return Err(IncorrectFormat {
@@ -56,7 +57,7 @@ impl Header {
         })
     }
 
-    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+    pub fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
         writer.write_u8_array(ARC_MAGIC)?;
         writer.write_i32::<BigEndian>(self.node_offset)?;
         writer.write_i32::<BigEndian>(self.size)?;
@@ -77,12 +78,12 @@ enum NodeType {
 }
 
 impl NodeType {
-    fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
+    pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let b = reader.read_u8()?;
         Self::try_from(b)
     }
 
-    fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
+    pub fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
         writer.write_u8(*self as u8)?;
         Ok(())
     }
@@ -163,6 +164,34 @@ impl Node {
         };
 
         Ok(Self { name, data })
+    }
+
+    pub fn serialize(
+        &self,
+        writer: &mut MutCursor,
+        pass: &mut DeferredPass,
+    ) -> SlipstreamResult<()> {
+        match &self.data {
+            NodeContent::File { data } => {
+                NodeType::File.serialize(writer)?;
+
+                pass.defer_arc_string(writer, &self.name)?;
+
+                writer.write_u32::<BigEndian>(DEFER_PLACEHOLDER)?; // substitute with data start
+                writer.write_u32::<BigEndian>(data.full_len() as u32)?;
+            }
+            NodeContent::Directory { parent, skip_node } => {
+                NodeType::Directory.serialize(writer)?;
+                pass.defer_arc_string(writer, &self.name)?;
+
+                writer.write_u32::<BigEndian>(*parent)?;
+                writer.write_u32::<BigEndian>(*skip_node)?;
+            }
+        }
+
+        todo!();
+
+        Ok(())
     }
 }
 

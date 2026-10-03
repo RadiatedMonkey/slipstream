@@ -10,6 +10,25 @@ use crate::mdl0::section::{DeserializeContents, SerializeContents};
 use crate::node::node::{IrNode, IrNodeType};
 use crate::visitor::{Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
 
+pub const NODE_TREE_NAME: &str = "NodeTree";
+pub const NODE_MIX_NAME: &str = "NodeMix";
+pub const DRAW_OPA_NAME: &str = "DrawOpa";
+
+/// Simple newtype that makes types with many IDs a lot clearer.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct MatrixId(pub u16);
+
+/// Simple newtype that makes types with many IDs a lot clearer.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct BoneId(pub u16);
+
+/// Simple newtype that makes types with many IDs a lot clearer.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct WeightId(pub u16);
+
 /// The opcode IDs for the possible commands in the definitions section of an MDL0 file.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, strum::FromRepr)]
 #[repr(u8)]
@@ -30,14 +49,14 @@ pub enum DefinitionOpCodeId {
 /// matrix to each of the bones.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MapNode {
-    pub bone_index: u16,
-    pub matrix_index: u16,
+    pub bone_index: BoneId,
+    pub matrix_index: MatrixId,
 }
 
 impl MapNode {
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
-        let bone_index = reader.read_u16::<BigEndian>()?;
-        let matrix_index = reader.read_u16::<BigEndian>()?;
+        let bone_index = BoneId(reader.read_u16::<BigEndian>()?);
+        let matrix_index = MatrixId(reader.read_u16::<BigEndian>()?);
 
         Ok(Self {
             bone_index,
@@ -48,21 +67,24 @@ impl MapNode {
     fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
         writer.reserve(4);
 
-        writer.write_u16::<BigEndian>(self.bone_index)?;
-        writer.write_u16::<BigEndian>(self.matrix_index)?;
+        writer.write_u16::<BigEndian>(self.bone_index.0)?;
+        writer.write_u16::<BigEndian>(self.matrix_index.0)?;
         Ok(())
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Weight {
-    pub bone_id: u16,
+pub struct BoneWeight {
+    /// The bone that this weight affects.
+    pub bone_id: BoneId,
+    /// A value between 0.0 and 1.0 that determines how much geometry "sticks" to this bone
+    /// when moving. A vertex can be affected by multiple bones. The weights must add up to 1.0.
     pub weight: f32,
 }
 
-impl Weight {
+impl BoneWeight {
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
-        let bone_id = reader.read_u16::<BigEndian>()?;
+        let bone_id = BoneId(reader.read_u16::<BigEndian>()?);
         let weight = reader.read_f32::<BigEndian>()?;
 
         Ok(Self { bone_id, weight })
@@ -70,7 +92,7 @@ impl Weight {
 
     fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
         // memory is reserved in `Weights` instead.
-        writer.write_u16::<BigEndian>(self.bone_id)?;
+        writer.write_u16::<BigEndian>(self.bone_id.0)?;
         writer.write_f32::<BigEndian>(self.weight)?;
         Ok(())
     }
@@ -78,21 +100,21 @@ impl Weight {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Weights {
-    pub weight_id: u16,
-    pub weights: Vec<Weight>,
+    pub id: WeightId,
+    pub weights: Vec<BoneWeight>,
 }
 
 impl Weights {
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
-        let weight_id = reader.read_u16::<BigEndian>()?;
+        let id = WeightId(reader.read_u16::<BigEndian>()?);
         let weight_count = reader.read_u8()?;
 
         let mut weights = Vec::with_capacity(weight_count as usize);
         for _ in 0..weight_count {
-            weights.push(Weight::deserialize(reader)?);
+            weights.push(BoneWeight::deserialize(reader)?);
         }
 
-        Ok(Self { weight_id, weights })
+        Ok(Self { id, weights })
     }
 
     fn serialize(&self, writer: &mut MutCursor) -> SlipstreamResult<()> {
@@ -104,7 +126,7 @@ impl Weights {
 
         writer.reserve(2 + 1 + weights_len * 6);
 
-        writer.write_u16::<BigEndian>(self.weight_id)?;
+        writer.write_u16::<BigEndian>(self.id.0)?;
         writer.write_u8(self.weights.len() as u8)?;
         for weight in &self.weights {
             weight.serialize(writer)?;
@@ -118,7 +140,7 @@ impl Weights {
 pub struct Draw {
     pub material_index: u16,
     pub object_index: u16,
-    pub bone_index: u16,
+    pub bone_index: BoneId,
     pub z_index: u8,
 }
 
@@ -126,7 +148,7 @@ impl Draw {
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let material_index = reader.read_u16::<BigEndian>()?;
         let object_index = reader.read_u16::<BigEndian>()?;
-        let bone_index = reader.read_u16::<BigEndian>()?;
+        let bone_index = BoneId(reader.read_u16::<BigEndian>()?);
         let priority = reader.read_u8()?;
 
         Ok(Self {
@@ -142,27 +164,28 @@ impl Draw {
 
         writer.write_u16::<BigEndian>(self.material_index)?;
         writer.write_u16::<BigEndian>(self.object_index)?;
-        writer.write_u16::<BigEndian>(self.bone_index)?;
+        writer.write_u16::<BigEndian>(self.bone_index.0)?;
         writer.write_u8(self.z_index)?;
 
         Ok(())
     }
 }
 
+/// Maps a matrix to its corresponding weights.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WeightIndex {
-    pub matrix_id: u16,
-    pub weight_index: u16,
+    pub matrix_id: MatrixId,
+    pub weight_id: WeightId,
 }
 
 impl WeightIndex {
     fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
-        let matrix_id = reader.read_u16::<BigEndian>()?;
-        let weight_index = reader.read_u16::<BigEndian>()?;
+        let matrix_id = MatrixId(reader.read_u16::<BigEndian>()?);
+        let weight_id = WeightId(reader.read_u16::<BigEndian>()?);
 
         Ok(Self {
             matrix_id,
-            weight_index,
+            weight_id,
         })
     }
 }

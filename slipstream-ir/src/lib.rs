@@ -1,6 +1,7 @@
 pub mod arc;
 pub mod brres;
 pub mod chr0;
+pub mod deferred_pass;
 pub mod encoding;
 pub mod gx;
 pub mod index;
@@ -11,3 +12,4 @@ pub mod tex0;
 pub mod util;
 pub mod visitor;
 pub mod yaz0;
+pub mod img;

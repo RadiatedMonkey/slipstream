@@ -2,11 +2,10 @@ use std::{
     hash::{DefaultHasher, Hash, Hasher},
     sync::LazyLock,
 };
-
-use crate::{
-    panes::{ContentSignature, Pane},
-    shared::mem_logger::GLOBAL_MEM_LOGS,
-};
+use std::sync::mpsc;
+use slipstream_shared::SlipstreamError;
+use crate::{panes::{ContentSignature, Pane}, reg_icon, shared::mem_logger::GLOBAL_MEM_LOGS};
+use crate::panes::PaneAction;
 
 /// All log panes have the same ID because they simply show the same content.
 static LOG_PANE_CONTENT_ID: LazyLock<ContentSignature> = LazyLock::new(|| {
@@ -16,11 +15,13 @@ static LOG_PANE_CONTENT_ID: LazyLock<ContentSignature> = LazyLock::new(|| {
     ContentSignature(hasher.finish())
 });
 
-pub struct LogPane;
+pub struct LogPane {
+    cmd_sender: mpsc::Sender<PaneAction>
+}
 
 impl LogPane {
-    pub fn new() -> Box<dyn Pane> {
-        Box::new(LogPane)
+    pub fn new(cmd_sender: mpsc::Sender<PaneAction>) -> Box<dyn Pane> {
+        Box::new(LogPane { cmd_sender })
     }
 }
 
@@ -33,8 +34,17 @@ impl Pane for LogPane {
         egui::WidgetText::Text(String::from("Logs"))
     }
 
-    fn draw(&mut self, ui: &mut egui::Ui, _tile_id: egui_tiles::TileId) -> egui_tiles::UiResponse {
-        let drag_started = ui.heading("Logs").drag_started();
+    fn draw(&mut self, ui: &mut egui::Ui, tile_id: egui_tiles::TileId) -> egui_tiles::UiResponse {
+        let egui::InnerResponse { inner, .. } = ui.horizontal(|ui| {
+            let drag_started = ui.heading("Logs").drag_started();
+
+            if ui.button(reg_icon!(X)).clicked() {
+                self.cmd_sender.send(PaneAction::RemoveTile(tile_id))?;
+            }
+
+            Ok::<_, SlipstreamError>(drag_started)
+        });
+        let drag_started = inner.expect("failed to send pane close request");
 
         egui::ScrollArea::vertical()
             .stick_to_bottom(true)

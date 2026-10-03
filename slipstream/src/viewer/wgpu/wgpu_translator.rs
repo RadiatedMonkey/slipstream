@@ -3,11 +3,11 @@
 use slipstream_shared::SlipstreamResult;
 use wgpu::util::DeviceExt;
 
-use crate::panes::viewer::{
-    intermediate::{IntermediateModel, IntermediatePolygon},
+use crate::viewer::{
     pipeline::CameraState,
     wgpu::{PipelineDescriptor, PipelineRegistry, PipelineSignature},
 };
+use crate::viewer::translation::{IntermediateModel, IntermediatePolygon};
 
 pub struct WgpuModel {
     camera_bind_group: wgpu::BindGroup,

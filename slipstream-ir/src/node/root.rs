@@ -5,11 +5,7 @@ use slipstream_shared::{
     error::{SlipstreamResult, UnsupportedError},
 };
 
-use crate::{
-    arc,
-    node::arena::{IrArena, IrNodeKey},
-    yaz0::{self, YAZ0_MAGIC},
-};
+use crate::{arc, brres, node::arena::{IrArena, IrNodeKey}, yaz0::{self, YAZ0_MAGIC}};
 /// Deserializes a possibly YAZ0-compressed file.
 ///
 /// After decompressing, this forwards the call to [`deserialize_unknown_root`]
@@ -19,7 +15,7 @@ pub fn deserialize_maybe_compressed(
     name: String,
 ) -> SlipstreamResult<IrNodeKey> {
     // Is this file compressed?
-    if &reader.remaining()[..4] == YAZ0_MAGIC {
+    if reader.remaining()[..4] == YAZ0_MAGIC {
         // then decompress it.
         reader = RefCursor::new(Arc::from(yaz0::decompress(&mut reader)?));
     }
@@ -41,9 +37,9 @@ pub fn deserialize_unknown_root(
         .try_into()
         .expect("array of size 4 does not have size 4?");
 
-    let contents = match magic {
-        &arc::ARC_MAGIC => arc::deserialize(reader, None, arena, name)?,
-        // &brres::BRRES_MAGIC => deserialize_virtual_root_brres(reader, file_cache, name)?,
+    let contents = match *magic {
+        arc::ARC_MAGIC => arc::deserialize(reader, None, arena, name)?,
+        brres::BRRES_MAGIC => brres::deserialize(reader, None, arena, name)?,
         _ => {
             return Err(UnsupportedError {
                 reason: format!(

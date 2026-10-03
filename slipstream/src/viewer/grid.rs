@@ -1,4 +1,4 @@
-use crate::panes::viewer::pipeline::{DEPTH_FORMAT, MSAA_SAMPLE_COUNT, TARGET_FORMAT};
+use crate::viewer::pipeline::{DEPTH_FORMAT, MSAA_SAMPLE_COUNT, TARGET_FORMAT};
 
 /// Pipeline that renders the 3D view background grid.
 pub struct GridPipeline {
@@ -13,7 +13,7 @@ impl GridPipeline {
             immediate_size: 0,
         });
 
-        let module = device.create_shader_module(wgpu::include_wgsl!("../../../shaders/grid.wgsl"));
+        let module = device.create_shader_module(wgpu::include_wgsl!("../../shaders/grid.wgsl"));
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("grid render pipeline"),

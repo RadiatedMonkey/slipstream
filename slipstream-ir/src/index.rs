@@ -190,35 +190,31 @@ impl SizeEstimate for IndexGroup {
     }
 }
 
-fn get_highest_bit(mut value: u8) -> u16 {
-    for i in (0..8).rev() {
-        value <<= 1;
-        if
-    }
-
-    0
+#[inline]
+fn get_highest_bit(value: u8) -> u16 {
+    7 - value.leading_zeros() as u16
 }
 
-fn compute_index_id(object: &str, subject: &str) -> u16 {
-    let object = object.as_bytes();
-    let subject = subject.as_bytes();
-
+// The index ID is computed by comparing the two strings.
+//
+// 1. Find the last non-equal character of both names and store the `index`.
+//      1. If the length of the subject filename is greater than the length of the object filename,
+//         `index` is the length of the subject filename minus 1.
+//      2. Otherwise compare each pair of characters, starting from the end, until a difference is found.
+// 2. Compare both characters of position `index` and find the highest bit that is not equal. If `index` exceeds
+//    the length of the object, assume character value 0. Store the bit index (7 for `0x80`, .., 0 for `0x01`) as `bitnum`.
+// 3. Calculate `id = (index << 3) | bitnum`
+fn compute_index_id(object: &[u8], subject: &[u8]) -> u16 {
     if object.len() < subject.len() {
-        let last = subject.len() - 1;
-        return (last as u16) << 3 | get_highest_bit(subject[last]);
+        let last_idx = subject.len() - 1;
+        return ((last_idx as u16) << 3) | get_highest_bit(subject[subject.len() - 1]);
     }
 
-    object
-        .iter()
+    (0..subject.len())
         .rev()
-        .zip(subject.iter().rev())
-        .find_map(|(l, f)| {
-            let diff = l ^ f;
-            if diff != 0 {
-                Some(get_highest_bit(diff))
-            } else {
-                None
-            }
+        .find_map(|i| {
+            let ch = object[i] ^ subject[i];
+            (ch != 0).then(|| ((i as u16) << 3) | get_highest_bit(ch))
         })
-        .unwrap_or(!0)
+        .unwrap_or(u16::MAX)
 }

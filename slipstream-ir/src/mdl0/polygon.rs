@@ -18,8 +18,10 @@ use crate::{
     node::node::IrNodeType,
     visitor::{Visitable, Visitor},
 };
-use crate::node::node::IrNode;
-use crate::visitor::{VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
+
+use crate::visitor::{
+    VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut,
+};
 
 /// Maps shape local matrix IDs to global ones.
 ///
@@ -200,7 +202,7 @@ impl TryFrom<GxBytecode> for GxVertexDeclaration {
 pub struct Polygon {
     pub array_flags: u32,
     pub modifier: PolygonModifier,
-    /// This shape's index in the `Shapes` section.
+    /// This shape's index in the Polygons` section.
     pub index: u32,
     /// The amount of vertices in this polygon.
     pub vertex_count: u32,
@@ -236,7 +238,11 @@ impl Visitable for Polygon {
         visitor.visit_polygon(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+    fn accept_mut(
+        &mut self,
+        node: VisitorContextNodeMut<'_>,
+        visitor: &mut dyn Visitor,
+    ) -> ControlFlow<()> {
         visitor.visit_polygon_mut(VisitorContextMut::new(node, self))
     }
 }
@@ -246,9 +252,7 @@ impl DeserializeContents for Polygon {
     const KIND: IrNodeType = IrNodeType::Polygon;
 
     #[tracing::instrument(skip_all)]
-    fn deserialize_contents(
-        reader: &mut RefCursor<[u8]>
-    ) -> SlipstreamResult<Self> {
+    fn deserialize_contents(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let object_start = reader.position();
         let _length = reader.read_u32::<BigEndian>()?;
         let _mdl0_offset = reader.read_i32::<BigEndian>()?;

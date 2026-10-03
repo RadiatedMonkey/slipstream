@@ -6,10 +6,7 @@ use slipstream_ir::node::{
 };
 use slipstream_shared::error::{SlipstreamError, SlipstreamResult};
 
-use crate::{
-    icons::NodeIconsExt,
-    panes::{ContentSignature, Pane, PaneAction, PaneId, RequestNewPane},
-};
+use crate::{icons::NodeIconsExt, panes::{ContentSignature, Pane, PaneAction, PaneId, RequestNewPane}, reg_icon};
 
 /// The outliner displays a file tree.
 ///
@@ -225,8 +222,17 @@ impl Pane for OutlinerPane {
         egui::WidgetText::Text(String::from("Outliner"))
     }
 
-    fn draw(&mut self, ui: &mut egui::Ui, _tile_id: egui_tiles::TileId) -> egui_tiles::UiResponse {
-        let drag_started = ui.heading("Outliner").drag_started();
+    fn draw(&mut self, ui: &mut egui::Ui, tile_id: egui_tiles::TileId) -> egui_tiles::UiResponse {
+        let egui::InnerResponse { inner, .. } = ui.horizontal(|ui| {
+            let drag_started = ui.heading("Outliner").drag_started();
+
+            if ui.button(reg_icon!(X)).clicked() {
+                self.cmd_sender.send(PaneAction::RemoveTile(tile_id))?;
+            }
+
+            Ok::<_, SlipstreamError>(drag_started)
+        });
+        let drag_started = inner.expect("failed to send pane close request");
 
         ui.spacing_mut().item_spacing.y = 7.5;
 
