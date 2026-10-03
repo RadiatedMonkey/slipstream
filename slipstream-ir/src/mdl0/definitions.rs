@@ -8,16 +8,35 @@ use slipstream_shared::verify;
 
 use crate::mdl0::section::{DeserializeContents, SerializeContents};
 use crate::node::node::{IrNode, IrNodeType};
-use crate::visitor::{Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
+use crate::visitor::{
+    Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNode,
+    VisitorContextNodeMut,
+};
 
 pub const NODE_TREE_NAME: &str = "NodeTree";
 pub const NODE_MIX_NAME: &str = "NodeMix";
 pub const DRAW_OPA_NAME: &str = "DrawOpa";
 
 /// Simple newtype that makes types with many IDs a lot clearer.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(transparent)]
 pub struct MatrixId(pub u16);
+
+impl MatrixId {
+    pub const EMPTY: MatrixId = MatrixId(u16::MAX);
+
+    #[inline]
+    pub const fn is_empty(&self) -> bool {
+        self.0 == u16::MAX
+    }
+}
+
+impl Default for MatrixId {
+    #[inline]
+    fn default() -> Self {
+        Self::EMPTY
+    }
+}
 
 /// Simple newtype that makes types with many IDs a lot clearer.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -246,7 +265,11 @@ impl Visitable for Definitions {
         visitor.visit_definitions(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+    fn accept_mut(
+        &mut self,
+        node: VisitorContextNodeMut<'_>,
+        visitor: &mut dyn Visitor,
+    ) -> ControlFlow<()> {
         visitor.visit_definitions_mut(VisitorContextMut::new(node, self))
     }
 }
@@ -256,9 +279,7 @@ impl DeserializeContents for Definitions {
     const KIND: IrNodeType = IrNodeType::Definitions;
 
     #[tracing::instrument(skip_all)]
-    fn deserialize_contents(
-        reader: &mut RefCursor<[u8]>
-    ) -> SlipstreamResult<Self> {
+    fn deserialize_contents(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let mut commands = Vec::new();
 
         let mut opcode = Self::read_opcode_id(reader)?;

@@ -3,11 +3,11 @@
 use slipstream_shared::SlipstreamResult;
 use wgpu::util::DeviceExt;
 
+use crate::viewer::translation::{IntermediateModel, IntermediatePolygon};
 use crate::viewer::{
     pipeline::CameraState,
     wgpu::{PipelineDescriptor, PipelineRegistry, PipelineSignature},
 };
-use crate::viewer::translation::{IntermediateModel, IntermediatePolygon};
 
 pub struct WgpuModel {
     camera_bind_group: wgpu::BindGroup,
@@ -58,20 +58,14 @@ pub struct WgpuPolygon {
 impl WgpuPolygon {
     pub const INDEX_FORMAT: wgpu::IndexFormat = wgpu::IndexFormat::Uint16;
     pub const VERTEX_LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
-        array_stride: 6 * size_of::<f32>() as u64,
-        step_mode: wgpu::VertexStepMode::Vertex,
-        attributes: &[
-            wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x3,
-                offset: 0,
-                shader_location: 0,
-            },
-            wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x3,
-                offset: 3 * size_of::<f32>() as u64,
-                shader_location: 1,
-            },
+        array_stride: 56,
+        attributes: &wgpu::vertex_attr_array![
+            0 => Float32x3,
+            1 => Float32x3,
+            2 => Uint32x4,
+            3 => Float32x4,
         ],
+        step_mode: wgpu::VertexStepMode::Vertex,
     };
 
     pub fn from_intermediate(

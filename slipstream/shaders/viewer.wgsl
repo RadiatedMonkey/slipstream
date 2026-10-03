@@ -7,9 +7,14 @@ struct CameraUniformData {
 @group(0) @binding(0)
 var<uniform> camera: CameraUniformData;
 
+@group(1) @binding(0)
+var<storage, read> bone_matrices: array<mat4x4f>;
+
 struct VertexInput {
     @location(0) position: vec3f,
-    @location(1) normal: vec3f
+    @location(1) normal: vec3f,
+    @location(2) bone_indices: vec4u,
+    @location(3) bone_weights: vec4f
 }
 
 struct VertexOutput {
@@ -19,9 +24,21 @@ struct VertexOutput {
 
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
+    var pos = vec4f(0.0);
+    var nrm = vec3f(0.0);
+
+    for (var i = 0u; i < 4u; i += 1) {
+        let w = input.bone_weights[i];
+        if (w > 0.0) {
+            let m = bone_matrices[input.bone_indices[i]];
+            pos += w * (m * vec4f(input.position, 1.0));
+            nrm += w * (mat3x3f(m[0].xyz, m[1].xyz, m[2].xyz) * input.normal);
+        }
+    }
+
     var output: VertexOutput;
-    output.vertex = camera.view_proj * vec4f(input.position, 1.0);
-    output.normal = input.normal;
+    output.vertex = camera.view_proj * pos;
+    output.normal = normalize(nrm);
     return output;
 }
 

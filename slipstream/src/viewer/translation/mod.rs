@@ -1,23 +1,26 @@
-mod vertices;
 mod skeleton;
+mod vertex;
 
-use std::ops::ControlFlow;
-pub use vertices::*;
 pub use skeleton::*;
-use slipstream_ir::gx::draw::{DrawOpCode, InlineNormal, InlinePosition, NormalData, NormalIndex, OpVertex, PositionData};
+pub use vertex::*;
+
 use slipstream_ir::gx::GxOpCode;
-use slipstream_ir::mdl0::definitions::{Definitions, DRAW_OPA_NAME, NODE_TREE_NAME, NODE_MIX_NAME};
+use slipstream_ir::gx::draw::{
+    DrawOpCode, InlineNormal, InlinePosition, NormalData, NormalIndex, OpVertex, PositionData,
+};
+use slipstream_ir::mdl0::definitions::{DRAW_OPA_NAME, Definitions, NODE_MIX_NAME, NODE_TREE_NAME};
 use slipstream_ir::mdl0::normals::NormalBuffer;
 use slipstream_ir::mdl0::polygon::Polygon;
 use slipstream_ir::mdl0::vertices::VertexBuffer;
 use slipstream_ir::node::arena::{IrArena, IrNodeKey};
 use slipstream_ir::visitor::{Visitable, Visitor, VisitorContext};
-use slipstream_shared::{try_unwrap, SlipstreamResult};
+use slipstream_shared::{SlipstreamResult, try_unwrap};
+use std::ops::ControlFlow;
 
 #[derive(Default, Debug)]
 pub struct IntermediateModel {
     pub bone_map: BoneMap,
-    pub bone_weights: BoneWeights,
+    pub bone_weights: Option<BoneWeights>,
     pub polygons: Vec<IntermediatePolygon>,
 }
 
@@ -53,7 +56,11 @@ impl<'a> ModelContents<'a> {
 
     /// Retrieves the given key from the map, downcasts it to `U`
     /// and runs `inspect_fn` on it.
-    pub(super) fn try_inspect_inner<F, T, U>(&self, key: IrNodeKey, inspect_fn: F) -> SlipstreamResult<T>
+    pub(super) fn try_inspect_inner<F, T, U>(
+        &self,
+        key: IrNodeKey,
+        inspect_fn: F,
+    ) -> SlipstreamResult<T>
     where
         U: Visitable,
         F: FnOnce(&U) -> SlipstreamResult<T>,
@@ -78,14 +85,21 @@ impl<'a> ModelContents<'a> {
         try_unwrap!(out, "vertex buffer {key:?} did not exist")
     }
 
-    fn translate_node_tree(&self, out: &mut IntermediateModel, arena: &IrArena) -> SlipstreamResult<()> {
+    fn translate_node_tree(
+        &self,
+        out: &mut IntermediateModel,
+        arena: &IrArena,
+    ) -> SlipstreamResult<()> {
         struct DefinitionVisitor<'a> {
             model: &'a ModelContents<'a>,
             result: SlipstreamResult<BoneMap>,
         }
 
         impl Visitor for DefinitionVisitor<'_> {
-            fn visit_definitions(&mut self, context: VisitorContext<'_, Definitions>) -> ControlFlow<()> {
+            fn visit_definitions(
+                &mut self,
+                context: VisitorContext<'_, Definitions>,
+            ) -> ControlFlow<()> {
                 tracing::trace!("Translating definition `{}`", context.meta.label);
                 self.result = BoneMap::from_definitions(context.content);
 
@@ -96,7 +110,7 @@ impl<'a> ModelContents<'a> {
         if let Some(node_tree) = self.node_tree {
             let mut visitor = DefinitionVisitor {
                 model: self,
-                result: Ok(BoneMap::default())
+                result: Ok(BoneMap::default()),
             };
             arena.visit(node_tree, &mut visitor)?;
             out.bone_map = visitor.result?;
@@ -105,14 +119,21 @@ impl<'a> ModelContents<'a> {
         Ok(())
     }
 
-    fn translate_node_mix(&self, out: &mut IntermediateModel, arena: &IrArena) -> SlipstreamResult<()> {
+    fn translate_node_mix(
+        &self,
+        out: &mut IntermediateModel,
+        arena: &IrArena,
+    ) -> SlipstreamResult<()> {
         struct DefinitionVisitor<'a> {
             model: &'a ModelContents<'a>,
             result: SlipstreamResult<BoneWeights>,
         }
 
         impl Visitor for DefinitionVisitor<'_> {
-            fn visit_definitions(&mut self, context: VisitorContext<'_, Definitions>) -> ControlFlow<()> {
+            fn visit_definitions(
+                &mut self,
+                context: VisitorContext<'_, Definitions>,
+            ) -> ControlFlow<()> {
                 tracing::trace!("Translating definition `{}`", context.meta.label);
                 self.result = BoneWeights::from_definitions(context.content);
 
@@ -123,17 +144,22 @@ impl<'a> ModelContents<'a> {
         if let Some(node_mix) = self.node_mix {
             let mut visitor = DefinitionVisitor {
                 model: self,
-                result: Ok(BoneWeights::default())
+                result: Ok(BoneWeights::default()),
             };
             arena.visit(node_mix, &mut visitor)?;
-            out.bone_weights = visitor.result?;
+            out.bone_weights = Some(visitor.result?);
         }
 
         Ok(())
     }
 
-    fn translate_polygons(&self, out: &mut IntermediateModel, arena: &IrArena) -> SlipstreamResult<()> {
+    fn translate_polygons(
+        &self,
+        out: &mut IntermediateModel,
+        arena: &IrArena,
+    ) -> SlipstreamResult<()> {
         struct PolygonVisitor<'a> {
+            out: &'a IntermediateModel,
             model: &'a ModelContents<'a>,
             scratch: &'a mut IntermediatePolygon,
             result: SlipstreamResult<()>,
@@ -142,7 +168,9 @@ impl<'a> ModelContents<'a> {
         impl Visitor for PolygonVisitor<'_> {
             fn visit_polygon(&mut self, context: VisitorContext<'_, Polygon>) -> ControlFlow<()> {
                 tracing::trace!("Translating polygon `{}`", context.meta.label);
-                self.result = self.model.translate_polygon(self.scratch, context.content);
+                self.result = self
+                    .model
+                    .translate_polygon(self.out, self.scratch, context.content);
 
                 ControlFlow::Break(())
             }
@@ -152,9 +180,10 @@ impl<'a> ModelContents<'a> {
         for &polygon in &self.polygons {
             let mut intermediate = IntermediatePolygon::default();
             let mut visitor = PolygonVisitor {
+                out,
                 model: self,
                 scratch: &mut intermediate,
-                result: Ok(())
+                result: Ok(()),
             };
             let _ = arena.visit(polygon, &mut visitor)?;
             visitor.result?;
@@ -181,12 +210,15 @@ impl<'a> ModelContents<'a> {
 }
 
 impl Visitor for ModelContents<'_> {
-    fn visit_definitions(&mut self, definitions: VisitorContext<'_, Definitions>) -> ControlFlow<()> {
+    fn visit_definitions(
+        &mut self,
+        definitions: VisitorContext<'_, Definitions>,
+    ) -> ControlFlow<()> {
         match definitions.meta.label {
             DRAW_OPA_NAME => self.draw_opaque = Some(definitions.meta.key),
             NODE_TREE_NAME => self.node_tree = Some(definitions.meta.key),
             NODE_MIX_NAME => self.node_mix = Some(definitions.meta.key),
-            _ => tracing::warn!("Unknown definitions file: `{}`", definitions.meta.label)
+            _ => tracing::warn!("Unknown definitions file: `{}`", definitions.meta.label),
         }
 
         ControlFlow::Break(())

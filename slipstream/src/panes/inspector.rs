@@ -11,6 +11,7 @@ use slipstream_shared::{SlipstreamError, SlipstreamResult};
 use std::ops::ControlFlow;
 use std::sync::{Arc, mpsc};
 use slipstream_ir::mdl0::bones::Bone;
+use slipstream_ir::mdl0::polygon::Polygon;
 use crate::reg_icon;
 
 struct InspectorVisitor<'ui> {
@@ -40,6 +41,15 @@ impl Visitor for InspectorVisitor<'_> {
     fn visit_vertices_mut(
         &mut self,
         context: VisitorContextMut<'_, VertexBuffer>,
+    ) -> ControlFlow<()> {
+        egui::ScrollArea::vertical().show(self.ui, |ui| {
+            ui.label(format!("{:#?}", context.content));
+        });
+        ControlFlow::Continue(())
+    }
+
+    fn visit_polygon_mut(
+        &mut self, context: VisitorContextMut<'_, Polygon>,
     ) -> ControlFlow<()> {
         egui::ScrollArea::vertical().show(self.ui, |ui| {
             ui.label(format!("{:#?}", context.content));

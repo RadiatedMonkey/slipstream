@@ -19,7 +19,7 @@ pub struct XfSizePayload {
 }
 
 impl XfSizePayload {
-    fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
+    pub fn deserialize(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let word = reader.read_u32::<BigEndian>()?;
         Ok(Self::from_bits(word))
     }
