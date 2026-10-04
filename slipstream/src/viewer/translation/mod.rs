@@ -8,19 +8,25 @@ use slipstream_ir::gx::GxOpCode;
 use slipstream_ir::gx::draw::{
     DrawOpCode, InlineNormal, InlinePosition, NormalData, NormalIndex, OpVertex, PositionData,
 };
+use slipstream_ir::mdl0::bones::Bone;
 use slipstream_ir::mdl0::definitions::{DRAW_OPA_NAME, Definitions, NODE_MIX_NAME, NODE_TREE_NAME};
 use slipstream_ir::mdl0::normals::NormalBuffer;
 use slipstream_ir::mdl0::polygon::Polygon;
 use slipstream_ir::mdl0::vertices::VertexBuffer;
 use slipstream_ir::node::arena::{IrArena, IrNodeKey};
 use slipstream_ir::visitor::{Visitable, Visitor, VisitorContext};
-use slipstream_shared::{SlipstreamResult, try_unwrap};
+use slipstream_shared::{SlipstreamResult, try_unwrap, verify};
 use std::ops::ControlFlow;
 
 #[derive(Default, Debug)]
 pub struct IntermediateModel {
     pub bone_map: BoneMap,
     pub bone_weights: Option<BoneWeights>,
+
+    /// The transformation matrices to obtain the bind pose for each bone.
+    /// The bone ID is a matrix into this array.
+    pub bind_poses: Vec<glam::Mat4>,
+
     pub polygons: Vec<IntermediatePolygon>,
 }
 
@@ -31,6 +37,8 @@ pub struct ModelContents<'a> {
     node_tree: Option<IrNodeKey>,
     node_mix: Option<IrNodeKey>,
     draw_opaque: Option<IrNodeKey>,
+
+    skeleton_root: Option<IrNodeKey>,
 
     vertices: Vec<IrNodeKey>,
     normals: Vec<IrNodeKey>,
@@ -45,6 +53,8 @@ impl<'a> ModelContents<'a> {
             node_tree: None,
             node_mix: None,
             draw_opaque: None,
+
+            skeleton_root: None,
 
             vertices: Vec::new(),
             normals: Vec::new(),
@@ -194,6 +204,54 @@ impl<'a> ModelContents<'a> {
         Ok(())
     }
 
+    fn traverse_skeleton(
+        &self,
+        out: &mut IntermediateModel,
+        arena: &IrArena,
+    ) -> SlipstreamResult<()> {
+        struct BoneVisitor<'a> {
+            out: &'a mut IntermediateModel,
+            result: SlipstreamResult<()>,
+        }
+
+        impl Visitor for BoneVisitor<'_> {
+            fn visit_bone(&mut self, bone: VisitorContext<'_, Bone>) -> ControlFlow<()> {
+                let [a, b, c] = bone.rotation_vector;
+                let mat = glam::Mat4::from_scale_rotation_translation(
+                    glam::Vec3::from_array(bone.scaling_vector),
+                    glam::Quat::from_euler(glam::EulerRot::XYZEx, a, b, c),
+                    glam::Vec3::from_array(bone.translation_vector),
+                );
+
+                if bone.index as usize > self.out.bind_poses.len() {
+                    self.out
+                        .bind_poses
+                        .resize(bone.index as usize + 1, glam::Mat4::ZERO);
+                }
+
+                self.out.bind_poses.insert(bone.index as usize, mat);
+
+                tracing::debug!("{mat:#?}");
+                tracing::error!("TOOD: Nested matrices should be multiplied");
+
+                ControlFlow::Continue(())
+            }
+        }
+
+        let skeleton_root = try_unwrap!(self.skeleton_root, "skeleton root was not found")?;
+
+        let mut visitor = BoneVisitor {
+            out,
+            result: Ok(()),
+        };
+        arena.walk(skeleton_root, &mut visitor)?;
+        visitor.result?;
+
+        tracing::debug!("bind poses buffer: {:#?}", out.bind_poses);
+
+        Ok(())
+    }
+
     /// Converts the raw buffers to an [`IntermediateModel`].
     ///
     /// This intermediate model can then be converted into wgpu buffers and commands
@@ -203,6 +261,7 @@ impl<'a> ModelContents<'a> {
 
         self.translate_node_tree(&mut model, arena)?;
         self.translate_node_mix(&mut model, arena)?;
+        self.traverse_skeleton(&mut model, arena)?;
         self.translate_polygons(&mut model, arena)?;
 
         Ok(model)
@@ -221,6 +280,18 @@ impl Visitor for ModelContents<'_> {
             _ => tracing::warn!("Unknown definitions file: `{}`", definitions.meta.label),
         }
 
+        ControlFlow::Break(())
+    }
+
+    fn visit_bone(&mut self, bone: VisitorContext<'_, Bone>) -> ControlFlow<()> {
+        // First bone we find should be the root, but still verify
+        if bone.parent.is_some() {
+            tracing::error!(
+                "First bone in the model has an assigned parent while it should be the root"
+            );
+        }
+
+        self.skeleton_root = Some(bone.meta.key);
         ControlFlow::Break(())
     }
 

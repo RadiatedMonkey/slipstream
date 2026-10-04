@@ -6,7 +6,9 @@ use slipstream_ir::gx::GxOpCode;
 use slipstream_ir::gx::draw::{
     DrawOpCode, InlineNormal, InlinePosition, NormalData, NormalIndex, OpVertex, PositionData,
 };
-use slipstream_ir::mdl0::definitions::{BoneId, Definitions, MatrixId, WeightId, DRAW_OPA_NAME, NODE_MIX_NAME, NODE_TREE_NAME};
+use slipstream_ir::mdl0::definitions::{
+    BoneId, DRAW_OPA_NAME, Definitions, MatrixId, NODE_MIX_NAME, NODE_TREE_NAME, WeightId,
+};
 use slipstream_ir::mdl0::normals::NormalBuffer;
 use slipstream_ir::mdl0::polygon::{BoneBind, Polygon};
 use slipstream_ir::mdl0::vertices::VertexBuffer;
@@ -146,7 +148,8 @@ impl ModelContents<'_> {
                         let mut resolved = try_unwrap!(
                             weights.get_by_matrix_id(matrix_id),
                             "bone weights lookup out of range: {matrix_id:?}"
-                        )?.to_vec();
+                        )?
+                        .to_vec();
 
                         if resolved.len() > MAX_BONE_INFLUENCES {
                             tracing::warn!(
@@ -182,7 +185,7 @@ impl ModelContents<'_> {
                         }
 
                         (bone_indices, bone_weights)
-                    },
+                    }
                     None => {
                         // The polygon has no bone table, so we assume every matrix index is a
                         // global index already.
@@ -303,7 +306,6 @@ impl ModelContents<'_> {
         Ok(vertex_index)
     }
 
-    #[tracing::instrument(skip_all, fields(vertex_count = vertices.len()))]
     fn resolve_triangle_list(
         &self,
         model: &IntermediateModel,
@@ -320,7 +322,6 @@ impl ModelContents<'_> {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all, fields(vertex_count = vertices.len()))]
     fn resolve_triangle_strip(
         &self,
         model: &IntermediateModel,

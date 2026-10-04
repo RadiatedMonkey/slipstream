@@ -1,11 +1,9 @@
+use crate::viewer::pipeline::{DEPTH_FORMAT, MSAA_SAMPLE_COUNT, TARGET_FORMAT};
 use std::{
     collections::HashMap,
     hash::{DefaultHasher, Hash, Hasher},
 };
-
-use crate::viewer::{
-    pipeline::{DEPTH_FORMAT, MSAA_SAMPLE_COUNT, TARGET_FORMAT},
-};
+use wgpu::util::DeviceExt;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -22,8 +20,9 @@ impl PipelineSignature {
 }
 
 pub struct PipelineDescriptor<'a> {
+    pub name: &'a str,
+    pub bind_group_layouts: &'a [Option<&'a wgpu::BindGroupLayout>],
     pub vertex_layouts: &'a [Option<wgpu::VertexBufferLayout<'a>>],
-    pub bind_groups: &'a [Option<&'a wgpu::BindGroupLayout>],
 }
 
 pub struct PipelineEntry {
@@ -59,14 +58,14 @@ impl PipelineRegistry {
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: None,
-                    bind_group_layouts: desc.bind_groups,
+                    bind_group_layouts: desc.bind_group_layouts,
                     immediate_size: 0,
                 });
 
             let pipeline = self
                 .device
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: None,
+                    label: Some(desc.name),
                     layout: Some(&layout),
                     vertex: wgpu::VertexState {
                         module: &module,

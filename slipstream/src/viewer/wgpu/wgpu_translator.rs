@@ -11,6 +11,8 @@ use crate::viewer::{
 
 pub struct WgpuModel {
     camera_bind_group: wgpu::BindGroup,
+    bind_pose_group: wgpu::BindGroup,
+
     pipelines: PipelineRegistry,
     polygons: Vec<WgpuPolygon>,
 }
@@ -21,12 +23,46 @@ impl WgpuModel {
         camera_state: &CameraState,
         ir: IntermediateModel,
     ) -> SlipstreamResult<Self> {
+        let bind_pose_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("bind pose storage buffer"),
+            contents: bytemuck::cast_slice(&ir.bind_poses),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+
+        let bind_pose_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("bind pose bind group layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    min_binding_size: None,
+                    has_dynamic_offset: false,
+                },
+                count: None,
+            }],
+        });
+
+        let bind_pose_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("bind pose bind group"),
+            layout: &bind_pose_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                    buffer: &bind_pose_buffer,
+                    offset: 0,
+                    size: None,
+                }),
+            }],
+        });
+
         let mut pipelines = PipelineRegistry::new(device.clone());
 
         let mut polygons = Vec::with_capacity(ir.polygons.len());
         for polygon in ir.polygons {
             polygons.push(WgpuPolygon::from_intermediate(
                 device,
+                &bind_pose_layout,
                 &camera_state.bind_group_layout,
                 &mut pipelines,
                 polygon,
@@ -35,6 +71,7 @@ impl WgpuModel {
 
         Ok(Self {
             camera_bind_group: camera_state.bind_group.clone(),
+            bind_pose_group,
             pipelines,
             polygons,
         })
@@ -42,7 +79,12 @@ impl WgpuModel {
 
     pub fn draw(&self, render_pass: &mut wgpu::RenderPass) {
         for polygon in &self.polygons {
-            polygon.draw(&self.pipelines, &self.camera_bind_group, render_pass);
+            polygon.draw(
+                &self.pipelines,
+                &self.camera_bind_group,
+                &self.bind_pose_group,
+                render_pass,
+            );
         }
     }
 }
@@ -70,7 +112,8 @@ impl WgpuPolygon {
 
     pub fn from_intermediate(
         device: &wgpu::Device,
-        camera_bg: &wgpu::BindGroupLayout,
+        bind_pose_layout: &wgpu::BindGroupLayout,
+        camera_layout: &wgpu::BindGroupLayout,
         pipelines: &mut PipelineRegistry,
         ir: IntermediatePolygon,
     ) -> SlipstreamResult<Self> {
@@ -87,7 +130,8 @@ impl WgpuPolygon {
         });
 
         let pipeline_signature = pipelines.register(PipelineDescriptor {
-            bind_groups: &[Some(camera_bg)],
+            name: "polygon",
+            bind_group_layouts: &[Some(camera_layout), Some(bind_pose_layout)],
             vertex_layouts: &[Some(Self::VERTEX_LAYOUT)],
         });
 
@@ -96,6 +140,7 @@ impl WgpuPolygon {
         Ok(Self {
             pipeline: pipeline_signature,
             indices: ir.indices.len() as u32,
+
             vertex_buffer,
             index_buffer,
         })
@@ -104,13 +149,15 @@ impl WgpuPolygon {
     pub fn draw(
         &self,
         pipelines: &PipelineRegistry,
-        camera_bg: &wgpu::BindGroup,
+        camera_group: &wgpu::BindGroup,
+        bind_pose_group: &wgpu::BindGroup,
         render_pass: &mut wgpu::RenderPass,
     ) {
         let pipeline = pipelines.get(self.pipeline).expect("pipeline not found");
 
         render_pass.set_pipeline(pipeline);
-        render_pass.set_bind_group(0, camera_bg, &[]);
+        render_pass.set_bind_group(0, camera_group, &[]);
+        render_pass.set_bind_group(1, bind_pose_group, &[]);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), Self::INDEX_FORMAT);
         render_pass.draw_indexed(0..self.indices, 0, 0..1);
