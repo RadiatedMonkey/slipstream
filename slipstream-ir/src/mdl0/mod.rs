@@ -27,7 +27,10 @@ use crate::mdl0::uvs::UvBuffer;
 use crate::mdl0::vertices::VertexBuffer;
 use crate::node::arena::{IrArena, IrNodeDescriptor, IrNodeKey};
 use crate::node::node::{ContentSlot, IrNode, IrNodeType};
-use crate::visitor::{Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
+use crate::visitor::{
+    Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNode,
+    VisitorContextNodeMut,
+};
 use byteorder::{BigEndian, ReadBytesExt};
 use section::deserialize_leaf_section;
 use slipstream_shared::cursor::RefCursor;
@@ -288,7 +291,11 @@ impl Visitable for Model {
         visitor.visit_mdl0(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+    fn accept_mut(
+        &mut self,
+        node: VisitorContextNodeMut<'_>,
+        visitor: &mut dyn Visitor,
+    ) -> ControlFlow<()> {
         visitor.visit_mdl0_mut(VisitorContextMut::new(node, self))
     }
 }
@@ -441,7 +448,7 @@ pub struct SectionHeader {
     pub mdl0_offset: i32,
     pub data_offset: i32,
     pub name_offset: i32,
-    pub index: u32
+    pub index: u32,
 }
 
 impl SectionHeader {
@@ -454,7 +461,12 @@ impl SectionHeader {
         let index = reader.read_u32::<BigEndian>()?;
 
         Ok(Self {
-            section_start, length, mdl0_offset, data_offset, name_offset, index
+            section_start,
+            length,
+            mdl0_offset,
+            data_offset,
+            name_offset,
+            index,
         })
     }
 

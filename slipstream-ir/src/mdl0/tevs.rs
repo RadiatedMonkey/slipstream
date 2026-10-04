@@ -5,7 +5,10 @@ use crate::gx::GxBytecode;
 
 use crate::mdl0::section::DeserializeContents;
 use crate::node::node::{IrNode, IrNodeType};
-use crate::visitor::{Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
+use crate::visitor::{
+    Visitable, Visitor, VisitorContext, VisitorContextMut, VisitorContextNode,
+    VisitorContextNodeMut,
+};
 use byteorder::{BigEndian, ReadBytesExt};
 use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::SlipstreamResult;
@@ -21,7 +24,11 @@ impl Visitable for Tev {
         visitor.visit_tev(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+    fn accept_mut(
+        &mut self,
+        node: VisitorContextNodeMut<'_>,
+        visitor: &mut dyn Visitor,
+    ) -> ControlFlow<()> {
         visitor.visit_tev_mut(VisitorContextMut::new(node, self))
     }
 }
@@ -31,9 +38,7 @@ impl DeserializeContents for Tev {
     const KIND: IrNodeType = IrNodeType::Tevs;
 
     #[tracing::instrument(skip_all)]
-    fn deserialize_contents(
-        reader: &mut RefCursor<[u8]>
-    ) -> SlipstreamResult<Self> {
+    fn deserialize_contents(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let _length = reader.read_u32::<BigEndian>()?;
         let _mdl0_offset = reader.read_i32::<BigEndian>()?;
         let _index = reader.read_i32::<BigEndian>()?;

@@ -5,7 +5,11 @@ use slipstream_shared::{
     error::{SlipstreamResult, UnsupportedError},
 };
 
-use crate::{arc, brres, node::arena::{IrArena, IrNodeKey}, yaz0::{self, YAZ0_MAGIC}};
+use crate::{
+    arc, brres,
+    node::arena::{IrArena, IrNodeKey},
+    yaz0::{self, YAZ0_MAGIC},
+};
 /// Deserializes a possibly YAZ0-compressed file.
 ///
 /// After decompressing, this forwards the call to [`deserialize_unknown_root`]

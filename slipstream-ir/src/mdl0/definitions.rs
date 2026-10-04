@@ -39,7 +39,7 @@ impl Default for MatrixId {
 }
 
 /// Simple newtype that makes types with many IDs a lot clearer.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct BoneId(pub u16);
 

@@ -7,6 +7,10 @@ use slipstream_shared::{
     error::{CorruptionError, InvalidInputError, SlipstreamError, SlipstreamResult},
 };
 
+use crate::node::node::IrNode;
+use crate::visitor::{
+    VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut,
+};
 use crate::{
     encoding::ReadArrayExt,
     index::IndexGroup,
@@ -16,8 +20,6 @@ use crate::{
     },
     visitor::{Visitable, Visitor},
 };
-use crate::node::node::IrNode;
-use crate::visitor::{VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
 
 #[bitfield(u32)]
 #[derive(PartialEq, Eq)]
@@ -245,7 +247,11 @@ impl Visitable for Bone {
         visitor.visit_bone(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+    fn accept_mut(
+        &mut self,
+        node: VisitorContextNodeMut<'_>,
+        visitor: &mut dyn Visitor,
+    ) -> ControlFlow<()> {
         visitor.visit_bone_mut(VisitorContextMut::new(node, self))
     }
 }

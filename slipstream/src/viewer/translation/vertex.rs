@@ -151,6 +151,14 @@ impl ModelContents<'_> {
                         )?
                         .to_vec();
 
+                        tracing::info!(
+                            pn_id = ?pn_id,
+                            bone_id = ?bone_id,
+                            matrix_id = ?matrix_id,
+                            influences = ?resolved,
+                            "vertex bone mapping"
+                        );
+
                         if resolved.len() > MAX_BONE_INFLUENCES {
                             tracing::warn!(
                                 "vertex has {} bone influences, truncated to {MAX_BONE_INFLUENCES} strongest influences",
@@ -158,7 +166,7 @@ impl ModelContents<'_> {
                             );
 
                             resolved.sort_unstable_by(|left, right| {
-                                left.weight.total_cmp(&right.weight)
+                                right.weight.total_cmp(&left.weight)
                             });
                         }
 
@@ -167,6 +175,11 @@ impl ModelContents<'_> {
 
                         let mut sum = 0.0;
                         for (i, infl) in resolved.iter().take(MAX_BONE_INFLUENCES).enumerate() {
+                            tracing::info!(
+                                influence_bone = ?infl.bone_id,
+                                influence_weight = ?infl.weight
+                            );
+
                             bone_indices[i] = infl.bone_id.0 as u32;
                             bone_weights[i] = infl.weight;
                             sum += infl.weight;
@@ -189,11 +202,18 @@ impl ModelContents<'_> {
                     None => {
                         // The polygon has no bone table, so we assume every matrix index is a
                         // global index already.
+                        //
+                        // tracing::error!(
+                        //     "Polygon has mixed bone bind but model does not specify bone weights"
+                        // );
 
-                        tracing::error!(
-                            "Polygon has mixed bone bind but model does not specify bone weights"
+                        tracing::info!(
+                            pn_id = ?pn_id,
+                            bone_id = ?bone_id,
+                            matrix_id = ?matrix_id,
+                            "vertex bone mapping"
                         );
-
+                        
                         let mut bone_indices = [0; MAX_BONE_INFLUENCES];
                         bone_indices[0] = bone_id as u32;
 

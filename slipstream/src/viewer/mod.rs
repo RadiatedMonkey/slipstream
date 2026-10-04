@@ -1,25 +1,27 @@
 pub mod grid;
 pub mod pipeline;
-pub mod wgpu;
 pub mod translation;
+pub mod wgpu;
 
 use std::{
     hash::Hasher,
     sync::{Arc, mpsc},
 };
 
-use eframe::egui_wgpu;
-use slipstream_ir::node::arena::{IrArena, IrNodeKey};
-use slipstream_shared::error::SlipstreamResult;
-use slipstream_shared::SlipstreamError;
+use crate::viewer::translation::ModelContents;
 use crate::viewer::{
     pipeline::{TEXTURE_FILTER_MODE, ViewerCallback, ViewerPipeline},
     wgpu::WgpuModel,
 };
-use crate::{panes::{
-    ContentSignature, Pane, PaneAction,
-}, reg_icon, shared::{GraphicsState, camera::CameraController}};
-use crate::viewer::translation::ModelContents;
+use crate::{
+    panes::{ContentSignature, Pane, PaneAction},
+    reg_icon,
+    shared::{GraphicsState, camera::CameraController},
+};
+use eframe::egui_wgpu;
+use slipstream_ir::node::arena::{IrArena, IrNodeKey};
+use slipstream_shared::SlipstreamError;
+use slipstream_shared::error::SlipstreamResult;
 
 pub struct ViewerPane {
     cmd_sender: mpsc::Sender<PaneAction>,

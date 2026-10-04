@@ -19,6 +19,7 @@ pub struct VisitorContextNode<'a> {
     pub label: &'a str,
     pub ty: IrNodeType,
     pub key: IrNodeKey,
+    pub children: &'a [IrNodeKey],
 }
 
 impl<'a> From<&'a IrNode> for VisitorContextNode<'a> {
@@ -28,6 +29,7 @@ impl<'a> From<&'a IrNode> for VisitorContextNode<'a> {
             label: &node.label,
             ty: node.ty,
             key: node.key(),
+            children: &node.children,
         }
     }
 }
@@ -59,6 +61,7 @@ pub struct VisitorContextNodeMut<'a> {
     pub label: &'a mut String,
     pub ty: IrNodeType,
     pub key: IrNodeKey,
+    pub children: &'a mut [IrNodeKey],
 }
 
 impl<'a> From<&'a mut IrNode> for VisitorContextNodeMut<'a> {
@@ -67,6 +70,7 @@ impl<'a> From<&'a mut IrNode> for VisitorContextNodeMut<'a> {
             key: node.key(),
             label: &mut node.label,
             ty: node.ty,
+            children: &mut node.children,
         }
     }
 }

@@ -6,7 +6,11 @@ use slipstream_ir::node::{
 };
 use slipstream_shared::error::{SlipstreamError, SlipstreamResult};
 
-use crate::{icons::NodeIconsExt, panes::{ContentSignature, Pane, PaneAction, PaneId, RequestNewPane}, reg_icon};
+use crate::{
+    icons::NodeIconsExt,
+    panes::{ContentSignature, Pane, PaneAction, PaneId, RequestNewPane},
+    reg_icon,
+};
 
 /// The outliner displays a file tree.
 ///

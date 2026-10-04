@@ -5,12 +5,14 @@ use slipstream_shared::cursor::{MutCursor, SizeEstimate};
 use slipstream_shared::{cursor::RefCursor, error::SlipstreamResult};
 
 use crate::mdl0::section::{DeserializeContents, SerializeContents};
+use crate::node::node::IrNode;
+use crate::visitor::{
+    VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut,
+};
 use crate::{
     node::node::IrNodeType,
     visitor::{Visitable, Visitor},
 };
-use crate::node::node::IrNode;
-use crate::visitor::{VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PaletteLink {
@@ -43,7 +45,11 @@ impl Visitable for PaletteLinks {
         visitor.visit_palette_links(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+    fn accept_mut(
+        &mut self,
+        node: VisitorContextNodeMut<'_>,
+        visitor: &mut dyn Visitor,
+    ) -> ControlFlow<()> {
         visitor.visit_palette_links_mut(VisitorContextMut::new(node, self))
     }
 }
@@ -53,9 +59,7 @@ impl DeserializeContents for PaletteLinks {
     const KIND: IrNodeType = IrNodeType::PaletteLinks;
 
     #[tracing::instrument(skip_all)]
-    fn deserialize_contents(
-        reader: &mut RefCursor<[u8]>
-    ) -> SlipstreamResult<Self> {
+    fn deserialize_contents(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let link_count = reader.read_u32::<BigEndian>()?;
 
         let mut links = Vec::with_capacity(link_count as usize);

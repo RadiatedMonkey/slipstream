@@ -9,6 +9,10 @@ use slipstream_shared::{
 };
 
 use crate::mdl0::section::DeserializeContents;
+use crate::node::node::IrNode;
+use crate::visitor::{
+    VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut,
+};
 use crate::{
     encoding::ReadArrayExt,
     gx::load_bp::{AlphaFunction, BlendMode, ConstantAlpha, DepthTest, LoadBpOpCode},
@@ -16,8 +20,6 @@ use crate::{
     node::node::IrNodeType,
     visitor::{Visitable, Visitor},
 };
-use crate::node::node::IrNode;
-use crate::visitor::{VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
 
 #[bitfield(u32)]
 #[derive(PartialEq, Eq)]
@@ -700,7 +702,11 @@ impl Visitable for MaterialBuffer {
         visitor.visit_material(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+    fn accept_mut(
+        &mut self,
+        node: VisitorContextNodeMut<'_>,
+        visitor: &mut dyn Visitor,
+    ) -> ControlFlow<()> {
         visitor.visit_material_mut(VisitorContextMut::new(node, self))
     }
 }
@@ -710,9 +716,7 @@ impl DeserializeContents for MaterialBuffer {
     const KIND: IrNodeType = IrNodeType::Material;
 
     #[tracing::instrument(skip_all)]
-    fn deserialize_contents(
-        reader: &mut RefCursor<[u8]>
-    ) -> SlipstreamResult<Self> {
+    fn deserialize_contents(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let material_start = reader.position();
         let _length = reader.read_u32::<BigEndian>()?;
         let _mdl0_offset = reader.read_i32::<BigEndian>()?;

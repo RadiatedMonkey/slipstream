@@ -177,7 +177,7 @@ pub enum SlipstreamError {
     #[error("channel has been disconnected")]
     ChannelDisconnect,
     #[error("channel is full")]
-    ChannelFull
+    ChannelFull,
 }
 
 pub type SlipstreamResult<T> = Result<T, SlipstreamError>;

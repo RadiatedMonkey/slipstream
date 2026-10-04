@@ -240,9 +240,9 @@ fn parse_payload(mut payload: DeferPayload) -> SlipstreamResult<Box<DynContent>>
             Box::new(ColorBuffer::deserialize_contents(&mut payload.reader)?)
         }
         IrNodeType::UvBuffer => Box::new(UvBuffer::deserialize_contents(&mut payload.reader)?),
-        IrNodeType::Material => Box::new(MaterialBuffer::deserialize_contents(
-            &mut payload.reader
-        )?),
+        IrNodeType::Material => {
+            Box::new(MaterialBuffer::deserialize_contents(&mut payload.reader)?)
+        }
         IrNodeType::Tevs => Box::new(Tev::deserialize_contents(&mut payload.reader)?),
         IrNodeType::Polygon => Box::new(Polygon::deserialize_contents(&mut payload.reader)?),
         IrNodeType::TextureLinks => {

@@ -25,7 +25,8 @@ struct VertexInput {
 
 struct VertexOutput {
     @builtin(position) vertex: vec4f,
-    @location(0) normal: vec3f
+    @location(0) normal: vec3f,
+    @location(1) @interpolate(flat) bone_index: u32
 }
 
 @vertex
@@ -33,7 +34,7 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     var pos = vec4f(0.0);
     var nrm = vec3f(0.0);
 
-    for (var i = 0u; i < 4u; i += 1) {
+    for (var i = 0u; i < 1u; i += 1) {
         let weight = input.bone_weights[i];
         if (weight > 0.0) {
             let transform = static_bind_poses[input.bone_indices[i]];
@@ -45,6 +46,7 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.vertex = camera.view_proj * pos;
     output.normal = normalize(nrm);
+    output.bone_index = input.bone_indices[0];
     return output;
 }
 
@@ -61,7 +63,17 @@ fn compute_diffuse(normal: vec3f) -> vec3f {
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    let color = input.normal * 0.5 + 0.5;
+    var color: vec3f = input.normal * 0.5 + 0.5;
+    if (input.bone_index == 1 || input.bone_index == 2 || input.bone_index == 3) {
+        // left leg (red)
+        color = vec3f(1.0, 0.0, 0.0);
+    } else if (input.bone_index == 4 || input.bone_index == 5 || input.bone_index == 6) {
+        // right leg (green)
+        color = vec3f(0.0, 1.0, 0.0);
+    } else if (input.bone_index == 8 || input.bone_index == 9 || input.bone_index == 10) {
+        // left arm (blue)
+        color = vec3f(0.0, 0.0, 1.0);
+    }
 
     // Convert the linear colours to SRGB.
     // Without this, the colours will look very washed out in the editor.

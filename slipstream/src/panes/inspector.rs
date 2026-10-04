@@ -1,5 +1,8 @@
 use crate::panes::{ContentSignature, Pane, PaneAction};
+use crate::reg_icon;
+use slipstream_ir::mdl0::bones::Bone;
 use slipstream_ir::mdl0::definitions::Definitions;
+use slipstream_ir::mdl0::polygon::Polygon;
 use slipstream_ir::mdl0::tex_links::TextureLinks;
 use slipstream_ir::mdl0::vertices::VertexBuffer;
 use slipstream_ir::node::arena::{IrArena, IrNodeKey};
@@ -10,9 +13,6 @@ use slipstream_shared::inspect::Inspect;
 use slipstream_shared::{SlipstreamError, SlipstreamResult};
 use std::ops::ControlFlow;
 use std::sync::{Arc, mpsc};
-use slipstream_ir::mdl0::bones::Bone;
-use slipstream_ir::mdl0::polygon::Polygon;
-use crate::reg_icon;
 
 struct InspectorVisitor<'ui> {
     pub ui: &'ui mut egui::Ui,
@@ -29,9 +29,7 @@ impl Visitor for InspectorVisitor<'_> {
         ControlFlow::Continue(())
     }
 
-    fn visit_bone_mut(
-        &mut self, context: VisitorContextMut<'_, Bone>,
-    ) -> ControlFlow<()> {
+    fn visit_bone_mut(&mut self, context: VisitorContextMut<'_, Bone>) -> ControlFlow<()> {
         egui::ScrollArea::vertical().show(self.ui, |ui| {
             ui.label(format!("{:#?}", context.content));
         });
@@ -48,9 +46,7 @@ impl Visitor for InspectorVisitor<'_> {
         ControlFlow::Continue(())
     }
 
-    fn visit_polygon_mut(
-        &mut self, context: VisitorContextMut<'_, Polygon>,
-    ) -> ControlFlow<()> {
+    fn visit_polygon_mut(&mut self, context: VisitorContextMut<'_, Polygon>) -> ControlFlow<()> {
         egui::ScrollArea::vertical().show(self.ui, |ui| {
             ui.label(format!("{:#?}", context.content));
         });
@@ -101,6 +97,7 @@ impl InspectorPane {
                     key: node.key(),
                     label: &mut node.label,
                     ty: node.ty,
+                    children: &mut node.children,
                 };
 
                 // Evaluate contents if lazy

@@ -7,14 +7,16 @@ use slipstream_shared::{
 };
 
 use crate::mdl0::section::DeserializeContents;
+use crate::node::node::IrNode;
+use crate::visitor::{
+    VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut,
+};
 use crate::{
     encoding::ReadArrayExt,
     node::node::IrNodeType,
     util::{VectorDivisor, VertexFormat, deserialize_scalar_data, deserialize_vector_data},
     visitor::{Visitable, Visitor},
 };
-use crate::node::node::IrNode;
-use crate::visitor::{VisitorContext, VisitorContextMut, VisitorContextNode, VisitorContextNodeMut};
 
 const COMPONENTS_S: u32 = 0x00;
 const COMPONENTS_ST: u32 = 0x01;
@@ -55,7 +57,11 @@ impl Visitable for UvBuffer {
         visitor.visit_uvs(VisitorContext::new(node, self))
     }
 
-    fn accept_mut(&mut self, node: VisitorContextNodeMut<'_>, visitor: &mut dyn Visitor) -> ControlFlow<()> {
+    fn accept_mut(
+        &mut self,
+        node: VisitorContextNodeMut<'_>,
+        visitor: &mut dyn Visitor,
+    ) -> ControlFlow<()> {
         visitor.visit_uvs_mut(VisitorContextMut::new(node, self))
     }
 }
@@ -65,9 +71,7 @@ impl DeserializeContents for UvBuffer {
     const KIND: IrNodeType = IrNodeType::UvBuffer;
 
     #[tracing::instrument(skip_all)]
-    fn deserialize_contents(
-        reader: &mut RefCursor<[u8]>
-    ) -> SlipstreamResult<Self> {
+    fn deserialize_contents(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let _length = reader.read_u32::<BigEndian>()?;
         let mdl0_offset_start = reader.position();
         let mdl0_offset = reader.read_i32::<BigEndian>()?;

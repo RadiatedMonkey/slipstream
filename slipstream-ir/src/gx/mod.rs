@@ -1,5 +1,9 @@
 use byteorder::ReadBytesExt;
-use slipstream_shared::{cursor::RefCursor, error::{CorruptionError, SlipstreamError, SlipstreamResult}, verify};
+use slipstream_shared::{
+    cursor::RefCursor,
+    error::{CorruptionError, SlipstreamError, SlipstreamResult},
+    verify,
+};
 
 use crate::{
     gx::{
@@ -211,7 +215,8 @@ impl GxBytecode {
         verify!(
             reader.position() == section_end,
             "did not read correct amount of opcodes in vertex declaration Gx bytecode ({} vs {})",
-            reader.position(), section_end
+            reader.position(),
+            section_end
         );
 
         Ok(Self { commands })

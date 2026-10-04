@@ -1,11 +1,15 @@
+use crate::panes::PaneAction;
+use crate::{
+    panes::{ContentSignature, Pane},
+    reg_icon,
+    shared::mem_logger::GLOBAL_MEM_LOGS,
+};
+use slipstream_shared::SlipstreamError;
+use std::sync::mpsc;
 use std::{
     hash::{DefaultHasher, Hash, Hasher},
     sync::LazyLock,
 };
-use std::sync::mpsc;
-use slipstream_shared::SlipstreamError;
-use crate::{panes::{ContentSignature, Pane}, reg_icon, shared::mem_logger::GLOBAL_MEM_LOGS};
-use crate::panes::PaneAction;
 
 /// All log panes have the same ID because they simply show the same content.
 static LOG_PANE_CONTENT_ID: LazyLock<ContentSignature> = LazyLock::new(|| {
@@ -16,7 +20,7 @@ static LOG_PANE_CONTENT_ID: LazyLock<ContentSignature> = LazyLock::new(|| {
 });
 
 pub struct LogPane {
-    cmd_sender: mpsc::Sender<PaneAction>
+    cmd_sender: mpsc::Sender<PaneAction>,
 }
 
 impl LogPane {

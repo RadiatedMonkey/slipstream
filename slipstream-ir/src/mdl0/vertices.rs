@@ -5,8 +5,8 @@ use slipstream_shared::cursor::RefCursor;
 use slipstream_shared::error::{CorruptionError, SlipstreamResult};
 
 use crate::encoding::ReadArrayExt;
-use crate::mdl0::section::DeserializeContents;
 use crate::mdl0::SectionHeader;
+use crate::mdl0::section::DeserializeContents;
 use crate::node::node::{IrNode, IrNodeType};
 use crate::util::{VectorDivisor, VertexFormat, deserialize_vector_data};
 use crate::visitor::{
@@ -127,9 +127,7 @@ impl DeserializeContents for VertexBuffer {
     const KIND: IrNodeType = IrNodeType::VertexBuffer;
 
     #[tracing::instrument(skip_all, fields(header_start))]
-    fn deserialize_contents(
-        reader: &mut RefCursor<[u8]>
-    ) -> SlipstreamResult<Self> {
+    fn deserialize_contents(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self> {
         let header = SectionHeader::deserialize(reader)?;
         let component_count = reader.read_u32::<BigEndian>()?;
         let format = VertexFormat::deserialize(reader)?;

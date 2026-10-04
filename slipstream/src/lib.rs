@@ -9,9 +9,9 @@ pub mod pages;
 pub mod panes;
 pub mod shared;
 
+pub mod viewer;
 #[cfg(target_arch = "wasm32")]
 mod web;
-pub mod viewer;
 
 use slipstream_shared::error::SlipstreamResult;
 

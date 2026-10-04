@@ -15,9 +15,7 @@ pub trait DeserializeContents: Sized {
     const NAME: &str;
     const KIND: IrNodeType;
 
-    fn deserialize_contents(
-        reader: &mut RefCursor<[u8]>
-    ) -> SlipstreamResult<Self>;
+    fn deserialize_contents(reader: &mut RefCursor<[u8]>) -> SlipstreamResult<Self>;
 }
 
 pub trait SerializeContents {

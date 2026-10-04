@@ -2,14 +2,13 @@ use eframe::egui_wgpu;
 use slipstream_shared::SlipstreamResult;
 use wgpu::util::DeviceExt;
 
-use crate::viewer::{grid::GridPipeline, wgpu::WgpuModel};
-use crate::
-shared::{
+use crate::shared::{
     GraphicsState,
     camera::{Camera, CameraController, CameraUniformData, OrbitCamera},
     vertex::{CUBE_INDICES, CUBE_VERTICES, Vertex3},
 };
 use crate::viewer::translation::IntermediateModel;
+use crate::viewer::{grid::GridPipeline, wgpu::WgpuModel};
 
 const DEFAULT_VIEWPORT: egui::Rect =
     egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0));
